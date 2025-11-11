@@ -55,5 +55,4 @@ results/
 # Research papers and codebases (large files)
 papers/
 repos/
-paper/*
 paper_source_code/*
