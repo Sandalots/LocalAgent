@@ -248,6 +248,23 @@ class ReproductionAgent:
             paper_content.methodology + "\n" + paper_content.experiments
         )
         logger.info(conclusions)
+        
+        # Generate visualizations
+        logger.info("\n[Generating Visualizations] Creating plots and charts...")
+        try:
+            viz_dir = Path('outputs') / 'visualizations'
+            paper_name = paper_path.stem  # Get filename without extension
+            viz_files = self.result_evaluator.generate_visualizations(
+                comparisons,
+                output_dir=viz_dir,
+                paper_name=paper_name
+            )
+            logger.info(f"✓ Generated {len(viz_files)} visualization files")
+            logger.info(f"📊 View visualizations: {viz_dir / 'visualizations.html'}")
+        except Exception as e:
+            logger.error(f"Failed to generate visualizations: {e}")
+            import traceback
+            traceback.print_exc()
 
         
         # Save results

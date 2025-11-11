@@ -351,6 +351,7 @@ JSON:"""
         
         metrics_by_config = {}
         current_config = None
+        current_task_type = None  # Track if we're in 'retrieval' or 'downstream' section
         
         lines = content.split('\n')
         for line in lines:
@@ -358,22 +359,32 @@ JSON:"""
             config_match = re.match(r'^###\s+(\w+/\w+)', line)
             if config_match:
                 current_config = config_match.group(1)
+                current_task_type = None  # Reset task type for new config
                 metrics_by_config[current_config] = {}
                 continue
             
+            # Detect task type sections
             if current_config:
+                if '**Retrieval Performance:**' in line:
+                    current_task_type = 'retrieval'
+                    continue
+                elif '**Downstream Tasks:**' in line:
+                    current_task_type = 'downstream'
+                    continue
+            
+            if current_config and current_task_type:
                 # Look for retrieval metrics like "bm25: Recall@10=0.458, MRR=0.252"
                 retrieval_match = re.search(
                     r'(\w+):\s+Recall@10=([\d.]+)(?:.*?)MRR=([\d.]+)',
                     line
                 )
-                if retrieval_match:
+                if retrieval_match and current_task_type == 'retrieval':
                     retriever = retrieval_match.group(1)
                     recall = float(retrieval_match.group(2))
                     mrr = float(retrieval_match.group(3))
                     
-                    # Store with retriever in key
-                    base_key = f"{current_config}/{retriever}"
+                    # Store with task type and retriever in key: sentence/minimal/retrieval/bm25
+                    base_key = f"{current_config}/{current_task_type}/{retriever}"
                     metrics_by_config.setdefault(base_key, {})
                     metrics_by_config[base_key]['recall@10'] = recall
                     metrics_by_config[base_key]['mrr'] = mrr
@@ -383,12 +394,13 @@ JSON:"""
                     r'(\w+):\s+Accuracy=([\d.]+)(?:.*?)F1=([\d.]+)',
                     line
                 )
-                if task_match:
+                if task_match and current_task_type == 'downstream':
                     retriever = task_match.group(1)
                     accuracy = float(task_match.group(2))
                     f1 = float(task_match.group(3))
                     
-                    base_key = f"{current_config}/{retriever}"
+                    # Store with task type and retriever in key: sentence/minimal/downstream/bm25
+                    base_key = f"{current_config}/{current_task_type}/{retriever}"
                     metrics_by_config.setdefault(base_key, {})
                     metrics_by_config[base_key]['accuracy'] = accuracy
                     metrics_by_config[base_key]['f1'] = f1
@@ -452,7 +464,7 @@ JSON:"""
                     configuration=baseline_key
                 ))
             else:
-                # If exact match fails, try the old fuzzy matching logic
+                # If exact match fails, try the fuzzy matching logic
                 baseline_parts = baseline_key.split('/')
                 
                 if len(baseline_parts) < 5:
@@ -463,36 +475,70 @@ JSON:"""
                 exp_set = baseline_parts[0]  # e.g., outputs_all_methods
                 granularity = baseline_parts[1]  # e.g., sentence
                 strategy = baseline_parts[2]  # e.g., minimal
-                # Note: might have 'retrieval' or 'downstream' in path
-                # Get last 2 parts as retriever and metric
-                retriever = baseline_parts[-2]  # e.g., bm25
-                metric_name = baseline_parts[-1]  # e.g., recall@10
+                task_type = baseline_parts[3]  # e.g., retrieval or downstream
+                retriever = baseline_parts[4]  # e.g., bm25
+                metric_name = baseline_parts[5] if len(baseline_parts) > 5 else None  # e.g., recall@10, accuracy
+                
+                # Normalize metric names for fuzzy matching
+                # Handle variations: f1 <-> f1_score, accuracy <-> accuracy, etc.
+                metric_variants = [metric_name] if metric_name else []
+                if metric_name:
+                    if metric_name == 'f1':
+                        metric_variants.append('f1_score')
+                    elif metric_name == 'f1_score':
+                        metric_variants.append('f1')
+                    # Add underscore variant
+                    if '_' not in metric_name:
+                        metric_variants.append(metric_name.replace('-', '_'))
                 
                 # Find matching reproduced metrics with fuzzy matching
                 matches = []
                 
-                for repro_key, repro_value in reproduced.items():
-                    repro_parts = repro_key.split('/')
-                    
-                    # Check if this reproduced metric matches the baseline configuration
-                    # Must match: exp_set, granularity, strategy, retriever, and metric_name
-                    if (exp_set in repro_key and
-                        granularity in repro_key and
-                        strategy in repro_key and
-                        retriever in repro_key and
-                        repro_key.endswith(metric_name)):
-                        matches.append((repro_key, repro_value))
+                # For downstream tasks, we need to also try with 'answerability' subtask
+                # since baseline might be: downstream/bm25/accuracy
+                # but reproduced might be: downstream/bm25/answerability/accuracy
+                search_patterns = []
+                if task_type == 'downstream' and metric_name:
+                    # Try with answerability subtask first (most common)
+                    search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/answerability/{metric_name}")
+                    # Try with f1 -> f1_score variant
+                    if metric_name == 'f1':
+                        search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/answerability/f1_score")
+                    # Also try without subtask (direct match)
+                    search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/{metric_name}")
+                elif metric_name:
+                    # For retrieval, direct match
+                    search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/{metric_name}")
+                
+                # Try exact pattern matches first
+                for pattern in search_patterns:
+                    if pattern in reproduced:
+                        matches.append((pattern, reproduced[pattern]))
+                        break
                 
                 if not matches:
-                    # Try looser matching - just check if key components are present
+                    # Fallback to fuzzy matching
                     for repro_key, repro_value in reproduced.items():
-                        key_lower = repro_key.lower()
-                        if (granularity in key_lower and
-                            strategy in key_lower and
-                            retriever in key_lower and
-                            metric_name.lower() in key_lower):
-                            matches.append((repro_key, repro_value))
-                            break
+                        # Check if this reproduced metric matches the baseline configuration
+                        # Must match: exp_set, granularity, strategy, task_type, retriever
+                        if not (exp_set in repro_key and
+                                granularity in repro_key and
+                                strategy in repro_key and
+                                task_type in repro_key and
+                                retriever in repro_key):
+                            continue
+                        
+                        # Check if metric name matches (handle f1/f1_score variants)
+                        if metric_name:
+                            if repro_key.endswith(metric_name):
+                                matches.append((repro_key, repro_value))
+                                break
+                            elif metric_name == 'f1' and repro_key.endswith('f1_score'):
+                                matches.append((repro_key, repro_value))
+                                break
+                            elif metric_name == 'f1_score' and repro_key.endswith('f1'):
+                                matches.append((repro_key, repro_value))
+                                break
                 
                 if not matches:
                     logger.debug(f"No match found for baseline: {baseline_key}")
@@ -1053,4 +1099,427 @@ Provide a concise analysis (3-4 paragraphs)."""
         ])
         
         return "\n".join(lines)
+    
+    def generate_visualizations(self, comparisons: List[ComparisonResult], 
+                               output_dir: Path,
+                               paper_name: str = "Research Paper") -> Dict[str, Path]:
+        """
+        Generate plots, tables, and graphs comparing agent results to baseline.
+        
+        Args:
+            comparisons: List of comparison results
+            output_dir: Directory to save visualizations
+            paper_name: Name of the paper for titles
+            
+        Returns:
+            Dict mapping visualization type to file path
+        """
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import pandas as pd
+        import numpy as np
+        
+        # Set style
+        sns.set_theme(style="whitegrid")
+        plt.rcParams['figure.figsize'] = (12, 8)
+        
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Convert comparisons to DataFrame
+        data = []
+        for comp in comparisons:
+            parts = comp.configuration.split('/')
+            exp_set = parts[0] if len(parts) > 0 else "unknown"
+            granularity = parts[1] if len(parts) > 1 else "unknown"
+            strategy = parts[2] if len(parts) > 2 else "unknown"
+            task_type = parts[3] if len(parts) > 3 else "unknown"
+            retriever = parts[4] if len(parts) > 4 else "unknown"
+            
+            data.append({
+                'experiment_set': exp_set,
+                'granularity': granularity,
+                'strategy': strategy,
+                'task_type': task_type,
+                'retriever': retriever,
+                'metric_name': comp.metric_name,
+                'baseline_value': comp.baseline_value,
+                'reproduced_value': comp.reproduced_value,
+                'difference': comp.difference,
+                'percent_difference': comp.percent_difference,
+                'within_threshold': comp.within_threshold,
+                'configuration': comp.configuration
+            })
+        
+        df = pd.DataFrame(data)
+        generated_files = {}
+        
+        logger.info(f"Generating visualizations for {len(df)} comparisons...")
+        
+        # 1. Overall Performance Comparison Bar Chart
+        fig, ax = plt.subplots(figsize=(10, 6))
+        within_threshold = df['within_threshold'].sum()
+        total = len(df)
+        outside_threshold = total - within_threshold
+        
+        bars = ax.bar(['Within Threshold\n(Success)', 'Outside Threshold\n(Failed)'], 
+                     [within_threshold, outside_threshold],
+                     color=['#2ecc71', '#e74c3c'])
+        ax.set_ylabel('Number of Metrics', fontsize=12)
+        ax.set_title(f'Agent Reproducibility Performance\n{paper_name}', 
+                    fontsize=14, fontweight='bold')
+        
+        # Add percentage labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{int(height)} ({height/total*100:.1f}%)',
+                   ha='center', va='bottom', fontsize=11)
+        
+        plt.tight_layout()
+        file_path = output_dir / 'overall_performance.png'
+        plt.savefig(file_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        generated_files['overall_performance'] = file_path
+        logger.info(f"✓ Generated overall performance chart: {file_path}")
+        
+        # 2. Performance by Configuration
+        fig, ax = plt.subplots(figsize=(14, 8))
+        config_stats = df.groupby(['granularity', 'strategy']).agg({
+            'within_threshold': 'sum',
+            'metric_name': 'count'
+        }).reset_index()
+        config_stats['success_rate'] = (config_stats['within_threshold'] / 
+                                        config_stats['metric_name'] * 100)
+        config_stats['config'] = (config_stats['granularity'] + '/' + 
+                                  config_stats['strategy'])
+        
+        config_stats = config_stats.sort_values('success_rate', ascending=True)
+        
+        colors = ['#e74c3c' if x < 80 else '#f39c12' if x < 90 else '#2ecc71' 
+                 for x in config_stats['success_rate']]
+        bars = ax.barh(config_stats['config'], config_stats['success_rate'], color=colors)
+        ax.set_xlabel('Success Rate (%)', fontsize=12)
+        ax.set_title('Reproducibility by Configuration', fontsize=14, fontweight='bold')
+        ax.axvline(x=80, color='red', linestyle='--', alpha=0.3, label='80% threshold')
+        ax.axvline(x=90, color='orange', linestyle='--', alpha=0.3, label='90% threshold')
+        ax.legend()
+        
+        # Add value labels
+        for i, (bar, val) in enumerate(zip(bars, config_stats['success_rate'])):
+            ax.text(val + 1, bar.get_y() + bar.get_height()/2, 
+                   f'{val:.1f}%', va='center', fontsize=9)
+        
+        plt.tight_layout()
+        file_path = output_dir / 'performance_by_configuration.png'
+        plt.savefig(file_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        generated_files['performance_by_configuration'] = file_path
+        logger.info(f"✓ Generated configuration performance chart: {file_path}")
+        
+        # 3. Scatter Plot: Baseline vs Reproduced Values
+        fig, ax = plt.subplots(figsize=(10, 10))
+        
+        # Color by whether within threshold
+        colors = df['within_threshold'].map({True: '#2ecc71', False: '#e74c3c'})
+        scatter = ax.scatter(df['baseline_value'], df['reproduced_value'], 
+                           c=colors, alpha=0.6, s=50)
+        
+        # Perfect reproduction line
+        max_val = max(df['baseline_value'].max(), df['reproduced_value'].max())
+        min_val = min(df['baseline_value'].min(), df['reproduced_value'].min())
+        ax.plot([min_val, max_val], [min_val, max_val], 
+               'k--', label='Perfect Reproduction', linewidth=2)
+        
+        # Threshold boundaries (±5%)
+        threshold = 0.05
+        ax.fill_between([min_val, max_val], 
+                       [min_val * (1-threshold), max_val * (1-threshold)],
+                       [min_val * (1+threshold), max_val * (1+threshold)],
+                       alpha=0.2, color='green', label=f'±{threshold*100}% threshold')
+        
+        ax.set_xlabel('Baseline Value', fontsize=12)
+        ax.set_ylabel('Reproduced Value', fontsize=12)
+        ax.set_title('Baseline vs Reproduced Metrics', fontsize=14, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        file_path = output_dir / 'baseline_vs_reproduced.png'
+        plt.savefig(file_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        generated_files['baseline_vs_reproduced'] = file_path
+        logger.info(f"✓ Generated scatter plot: {file_path}")
+        
+        # 4. Distribution of Percent Differences
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Cap extreme values for better visualization
+        percent_diff_capped = df['percent_difference'].clip(-50, 50)
+        
+        ax.hist(percent_diff_capped, bins=50, color='#3498db', alpha=0.7, edgecolor='black')
+        ax.axvline(x=0, color='green', linestyle='--', linewidth=2, label='Perfect match')
+        ax.axvline(x=-5, color='orange', linestyle='--', alpha=0.7, label='±5% threshold')
+        ax.axvline(x=5, color='orange', linestyle='--', alpha=0.7)
+        
+        ax.set_xlabel('Percent Difference (%)', fontsize=12)
+        ax.set_ylabel('Frequency', fontsize=12)
+        ax.set_title('Distribution of Metric Deviations', fontsize=14, fontweight='bold')
+        ax.legend()
+        
+        plt.tight_layout()
+        file_path = output_dir / 'deviation_distribution.png'
+        plt.savefig(file_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        generated_files['deviation_distribution'] = file_path
+        logger.info(f"✓ Generated deviation distribution: {file_path}")
+        
+        # 5. Heatmap: Performance by Granularity and Task Type
+        if 'granularity' in df.columns and 'task_type' in df.columns:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            pivot = df.pivot_table(
+                values='within_threshold',
+                index='granularity',
+                columns='task_type',
+                aggfunc='mean'
+            ) * 100  # Convert to percentage
+            
+            sns.heatmap(pivot, annot=True, fmt='.1f', cmap='RdYlGn', 
+                       vmin=0, vmax=100, ax=ax, cbar_kws={'label': 'Success Rate (%)'})
+            ax.set_title('Success Rate by Granularity and Task Type', 
+                        fontsize=14, fontweight='bold')
+            ax.set_xlabel('Task Type', fontsize=12)
+            ax.set_ylabel('Granularity', fontsize=12)
+            
+            plt.tight_layout()
+            file_path = output_dir / 'heatmap_granularity_tasktype.png'
+            plt.savefig(file_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            generated_files['heatmap_granularity_tasktype'] = file_path
+            logger.info(f"✓ Generated heatmap: {file_path}")
+        
+        # 6. Summary Statistics Table
+        summary_data = {
+            'Metric': [
+                'Total Comparisons',
+                'Within Threshold',
+                'Outside Threshold',
+                'Success Rate',
+                'Mean Absolute Deviation',
+                'Median Absolute Deviation',
+                'Std Dev of Deviations'
+            ],
+            'Value': [
+                f"{len(df)}",
+                f"{df['within_threshold'].sum()}",
+                f"{(~df['within_threshold']).sum()}",
+                f"{df['within_threshold'].mean() * 100:.2f}%",
+                f"{df['percent_difference'].abs().mean():.2f}%",
+                f"{df['percent_difference'].abs().median():.2f}%",
+                f"{df['percent_difference'].std():.2f}%"
+            ]
+        }
+        
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.axis('tight')
+        ax.axis('off')
+        
+        table = ax.table(cellText=[[summary_data['Metric'][i], summary_data['Value'][i]] 
+                                   for i in range(len(summary_data['Metric']))],
+                        colLabels=['Metric', 'Value'],
+                        cellLoc='left',
+                        loc='center',
+                        colWidths=[0.6, 0.4])
+        
+        table.auto_set_font_size(False)
+        table.set_fontsize(10)
+        table.scale(1, 2)
+        
+        # Style header
+        for i in range(2):
+            table[(0, i)].set_facecolor('#3498db')
+            table[(0, i)].set_text_props(weight='bold', color='white')
+        
+        # Alternate row colors
+        for i in range(1, len(summary_data['Metric']) + 1):
+            for j in range(2):
+                if i % 2 == 0:
+                    table[(i, j)].set_facecolor('#ecf0f1')
+        
+        plt.title('Summary Statistics', fontsize=14, fontweight='bold', pad=20)
+        plt.tight_layout()
+        file_path = output_dir / 'summary_statistics.png'
+        plt.savefig(file_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        generated_files['summary_statistics'] = file_path
+        logger.info(f"✓ Generated summary statistics table: {file_path}")
+        
+        # 7. Export detailed CSV
+        csv_path = output_dir / 'detailed_comparison.csv'
+        df.to_csv(csv_path, index=False)
+        generated_files['detailed_csv'] = csv_path
+        logger.info(f"✓ Exported detailed CSV: {csv_path}")
+        
+        # Generate index HTML
+        html_content = self._generate_visualization_index(generated_files, df, paper_name)
+        html_path = output_dir / 'visualizations.html'
+        with open(html_path, 'w') as f:
+            f.write(html_content)
+        generated_files['index_html'] = html_path
+        logger.info(f"✓ Generated visualization index: {html_path}")
+        
+        logger.info(f"\n{'='*80}")
+        logger.info(f"📊 Generated {len(generated_files)} visualizations in: {output_dir}")
+        logger.info(f"📄 Open {html_path} in a browser to view all visualizations")
+        logger.info(f"{'='*80}\n")
+        
+        return generated_files
+    
+    def _generate_visualization_index(self, files: Dict[str, Path], 
+                                     df, paper_name: str) -> str:
+        """Generate an HTML index page for all visualizations."""
+        import pandas as pd
+        from datetime import datetime
+        
+        success_rate = df['within_threshold'].mean() * 100
+        
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Reproducibility Analysis - {paper_name}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        h1 {{
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }}
+        h2 {{
+            color: #34495e;
+            margin-top: 30px;
+        }}
+        .summary {{
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }}
+        .metric {{
+            display: inline-block;
+            margin: 10px 20px 10px 0;
+            font-size: 18px;
+        }}
+        .metric-value {{
+            font-weight: bold;
+            color: #3498db;
+            font-size: 24px;
+        }}
+        .success {{
+            color: #2ecc71;
+        }}
+        .warning {{
+            color: #f39c12;
+        }}
+        .danger {{
+            color: #e74c3c;
+        }}
+        .visualization {{
+            background-color: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .visualization img {{
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }}
+        .footer {{
+            margin-top: 40px;
+            padding: 20px;
+            text-align: center;
+            color: #7f8c8d;
+            border-top: 1px solid #bdc3c7;
+        }}
+    </style>
+</head>
+<body>
+    <h1>🔬 Research Paper Reproducibility Analysis</h1>
+    <h2>{paper_name}</h2>
+    
+    <div class="summary">
+        <h3>Executive Summary</h3>
+        <div class="metric">
+            <div>Total Comparisons</div>
+            <div class="metric-value">{len(df)}</div>
+        </div>
+        <div class="metric">
+            <div>Success Rate</div>
+            <div class="metric-value {'success' if success_rate > 90 else 'warning' if success_rate > 70 else 'danger'}">
+                {success_rate:.1f}%
+            </div>
+        </div>
+        <div class="metric">
+            <div>Within Threshold</div>
+            <div class="metric-value success">{df['within_threshold'].sum()}</div>
+        </div>
+        <div class="metric">
+            <div>Failed</div>
+            <div class="metric-value danger">{(~df['within_threshold']).sum()}</div>
+        </div>
+        <div class="metric">
+            <div>Mean Deviation</div>
+            <div class="metric-value">{df['percent_difference'].abs().mean():.2f}%</div>
+        </div>
+    </div>
+    
+    <h2>📊 Visualizations</h2>
+"""
+        
+        # Add each visualization
+        viz_titles = {
+            'overall_performance': 'Overall Performance',
+            'performance_by_configuration': 'Performance by Configuration',
+            'baseline_vs_reproduced': 'Baseline vs Reproduced Scatter Plot',
+            'deviation_distribution': 'Distribution of Deviations',
+            'heatmap_granularity_tasktype': 'Success Rate Heatmap',
+            'summary_statistics': 'Summary Statistics Table'
+        }
+        
+        for key, title in viz_titles.items():
+            if key in files:
+                html += f"""
+    <div class="visualization">
+        <h3>{title}</h3>
+        <img src="{files[key].name}" alt="{title}">
+    </div>
+"""
+        
+        html += f"""
+    <div class="visualization">
+        <h3>📄 Detailed Data Export</h3>
+        <p>Download the complete comparison data: 
+           <a href="{files['detailed_csv'].name}">detailed_comparison.csv</a>
+        </p>
+    </div>
+    
+    <div class="footer">
+        <p>Generated by Local Research Paper Reproduction Agent</p>
+        <p>Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+</body>
+</html>
+"""
+        return html
+
 
