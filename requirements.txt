@@ -1,0 +1,25 @@
+# Python dependencies for Local Research Paper Reproduction Agent
+
+# PDF parsing
+PyPDF2==3.0.1
+
+# HTTP requests for Ollama API
+requests==2.31.0
+
+# Data processing
+numpy==1.26.0
+
+# Configuration
+PyYAML==6.0.1
+
+# Logging and utilities
+python-dotenv==1.0.0
+
+# Optional: Advanced PDF parsing
+# pdfplumber==0.10.3
+
+# Optional: Code analysis
+# ast-grep==0.5.0
+
+# Optional: Git operations (system git is recommended)
+# GitPython==3.1.40

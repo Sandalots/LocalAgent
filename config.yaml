@@ -1,0 +1,30 @@
+# Configuration file for Local Research Paper Reproduction Agent
+
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3"  # Options: llama3, mistral, codellama, etc.
+  temperature: 0.7
+  timeout: 120
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+experiment:
+  timeout: 3600  # seconds
+  max_retries: 2
+  use_venv: true
+
+evaluation:
+  threshold: 0.05  # 5% acceptable difference
+  metrics_of_interest:
+    - accuracy
+    - f1_score
+    - precision
+    - recall
+    - loss
+
+paths:
+  temp_dir: "/tmp/paper_reproduction"
+  output_dir: "./outputs"
+  cache_dir: "./.cache"
