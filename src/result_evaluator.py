@@ -193,24 +193,26 @@ class ResultEvaluator:
         Returns:
             BaselineMetrics with extracted values
         """
-        # PRIORITY 1: Use complete_results.json as ground truth baseline
-        # This is the actual data from the paper's experiments
-        if codebase_path:
-            json_metrics = self._extract_baseline_from_complete_results(codebase_path)
-            if json_metrics:
-                logger.info(f"✓ Using complete_results.json as baseline (ground truth)")
-                return BaselineMetrics(
-                    metrics=json_metrics,
-                    source="Extracted from complete_results.json (ground truth)"
-                )
-        
-        # FALLBACK: Try to parse report.md files for configuration-specific metrics
+        # PRIORITY 1: Try to parse report.md files for configuration-specific metrics
+        # This represents the paper's reported baselines, not the reproduced results
         if codebase_path:
             metrics = self._parse_report_files(codebase_path)
             if metrics:
+                logger.info(f"✓ Using report.md as baseline (paper's reported results)")
                 return BaselineMetrics(
                     metrics=metrics,
                     source="Parsed from outputs_all_methods/report.md"
+                )
+        
+        # FALLBACK: Use complete_results.json only if report.md not available
+        # Note: This may give 100% match if comparing file against itself
+        if codebase_path:
+            json_metrics = self._extract_baseline_from_complete_results(codebase_path)
+            if json_metrics:
+                logger.warning(f"⚠ Using complete_results.json as baseline (may give 100% match)")
+                return BaselineMetrics(
+                    metrics=json_metrics,
+                    source="Extracted from complete_results.json (same as reproduced)"
                 )
         
         # Fallback to LLM extraction from paper
@@ -420,57 +422,11 @@ JSON:"""
         unmatched_baseline = []
         
         for baseline_key, baseline_value in baseline.metrics.items():
-            # Parse baseline key
-            # Format: outputs_all_methods/sentence/minimal/bm25/recall@10
-            baseline_parts = baseline_key.split('/')
-            
-            if len(baseline_parts) < 5:
-                logger.warning(f"Baseline key has unexpected format: {baseline_key}")
-                continue
-            
-            exp_set = baseline_parts[0]  # e.g., outputs_all_methods
-            granularity = baseline_parts[1]  # e.g., sentence
-            strategy = baseline_parts[2]  # e.g., minimal
-            retriever = baseline_parts[3]  # e.g., bm25
-            metric_name = baseline_parts[4]  # e.g., recall@10
-            
-            # Find matching reproduced metrics
-            # Reproduced format: outputs_all_methods/sentence/minimal/retrieval/bm25/metrics/recall@10
-            # or similar variations
-            matches = []
-            
-            for repro_key, repro_value in reproduced.items():
-                repro_parts = repro_key.split('/')
+            # Simple exact matching since keys should be identical when both from complete_results.json
+            if baseline_key in reproduced:
+                reproduced_value = reproduced[baseline_key]
+                matched_count += 1
                 
-                # Check if this reproduced metric matches the baseline configuration
-                # Must match: exp_set, granularity, strategy, retriever, and metric_name
-                if (exp_set in repro_key and
-                    granularity in repro_key and
-                    strategy in repro_key and
-                    retriever in repro_key and
-                    repro_key.endswith(metric_name)):
-                    matches.append((repro_key, repro_value))
-            
-            if not matches:
-                # Try looser matching - just check if key components are present
-                for repro_key, repro_value in reproduced.items():
-                    key_lower = repro_key.lower()
-                    if (granularity in key_lower and
-                        strategy in key_lower and
-                        retriever in key_lower and
-                        metric_name.lower() in key_lower):
-                        matches.append((repro_key, repro_value))
-                        break
-            
-            if not matches:
-                logger.debug(f"No match found for baseline: {baseline_key}")
-                unmatched_baseline.append(baseline_key)
-                continue
-            
-            matched_count += 1
-            
-            # Create comparison for each match (usually just one)
-            for config_path, reproduced_value in matches:
                 # Calculate difference
                 difference = reproduced_value - baseline_value
                 
@@ -483,6 +439,9 @@ JSON:"""
                 # Check if within threshold
                 within_threshold = abs(percent_diff) <= (self.threshold * 100)
                 
+                # Extract metric name from key for display
+                metric_name = baseline_key.split('/')[-1]
+                
                 comparisons.append(ComparisonResult(
                     metric_name=metric_name,
                     baseline_value=baseline_value,
@@ -490,8 +449,81 @@ JSON:"""
                     difference=difference,
                     percent_difference=percent_diff,
                     within_threshold=within_threshold,
-                    configuration=config_path
+                    configuration=baseline_key
                 ))
+            else:
+                # If exact match fails, try the old fuzzy matching logic
+                baseline_parts = baseline_key.split('/')
+                
+                if len(baseline_parts) < 5:
+                    logger.warning(f"Baseline key has unexpected format: {baseline_key}")
+                    unmatched_baseline.append(baseline_key)
+                    continue
+                
+                exp_set = baseline_parts[0]  # e.g., outputs_all_methods
+                granularity = baseline_parts[1]  # e.g., sentence
+                strategy = baseline_parts[2]  # e.g., minimal
+                # Note: might have 'retrieval' or 'downstream' in path
+                # Get last 2 parts as retriever and metric
+                retriever = baseline_parts[-2]  # e.g., bm25
+                metric_name = baseline_parts[-1]  # e.g., recall@10
+                
+                # Find matching reproduced metrics with fuzzy matching
+                matches = []
+                
+                for repro_key, repro_value in reproduced.items():
+                    repro_parts = repro_key.split('/')
+                    
+                    # Check if this reproduced metric matches the baseline configuration
+                    # Must match: exp_set, granularity, strategy, retriever, and metric_name
+                    if (exp_set in repro_key and
+                        granularity in repro_key and
+                        strategy in repro_key and
+                        retriever in repro_key and
+                        repro_key.endswith(metric_name)):
+                        matches.append((repro_key, repro_value))
+                
+                if not matches:
+                    # Try looser matching - just check if key components are present
+                    for repro_key, repro_value in reproduced.items():
+                        key_lower = repro_key.lower()
+                        if (granularity in key_lower and
+                            strategy in key_lower and
+                            retriever in key_lower and
+                            metric_name.lower() in key_lower):
+                            matches.append((repro_key, repro_value))
+                            break
+                
+                if not matches:
+                    logger.debug(f"No match found for baseline: {baseline_key}")
+                    unmatched_baseline.append(baseline_key)
+                    continue
+                
+                matched_count += 1
+                
+                # Create comparison for each match (usually just one)
+                for config_path, reproduced_value in matches:
+                    # Calculate difference
+                    difference = reproduced_value - baseline_value
+                    
+                    # Calculate percent difference (handle divide by zero)
+                    if baseline_value != 0:
+                        percent_diff = (difference / abs(baseline_value)) * 100
+                    else:
+                        percent_diff = float('inf') if difference != 0 else 0
+                    
+                    # Check if within threshold
+                    within_threshold = abs(percent_diff) <= (self.threshold * 100)
+                    
+                    comparisons.append(ComparisonResult(
+                        metric_name=metric_name,
+                        baseline_value=baseline_value,
+                        reproduced_value=reproduced_value,
+                        difference=difference,
+                        percent_difference=percent_diff,
+                        within_threshold=within_threshold,
+                        configuration=config_path
+                    ))
         
         # Summary logging
         logger.info(f"✓ Matched {matched_count}/{len(baseline.metrics)} baseline metrics")
