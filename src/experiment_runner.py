@@ -44,8 +44,79 @@ class ExperimentResult:
 class ExperimentRunner:
     """Execute experiments and capture results."""
     
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client=None, config=None):
         self.llm_client = llm_client
+        self.config = config or {}
+    
+    def validate_data_integrity(self, codebase_path: Path) -> Dict[str, Any]:
+        """
+        Validate dataset files before running experiments.
+        
+        Args:
+            codebase_path: Path to codebase
+            
+        Returns:
+            Dict with validation results
+        """
+        data_dir = codebase_path / "data"
+        results = {
+            'valid': True,
+            'warnings': [],
+            'file_stats': {}
+        }
+        
+        if not data_dir.exists():
+            results['valid'] = False
+            results['warnings'].append(f"Data directory not found: {data_dir}")
+            return results
+        
+        # Expected data files with minimum requirements
+        expected_files = {
+            'qa.jsonl': {'min_lines': 500, 'description': 'Q&A dataset'},
+            'papers.jsonl': {'min_lines': 50, 'description': 'Papers corpus'},
+            'qa-unlabeled.jsonl': {'min_lines': 1000, 'description': 'Unlabeled Q&A'},
+            'qa-augmented-answers.jsonl': {'min_lines': 500, 'description': 'Augmented answers'}
+        }
+        
+        for filename, requirements in expected_files.items():
+            filepath = data_dir / filename
+            
+            if not filepath.exists():
+                results['warnings'].append(f"Missing {requirements['description']}: {filename}")
+                continue
+            
+            try:
+                # Count lines and check file size
+                line_count = sum(1 for _ in open(filepath, 'r', encoding='utf-8'))
+                file_size = filepath.stat().st_size
+                
+                results['file_stats'][filename] = {
+                    'lines': line_count,
+                    'size_mb': file_size / (1024 * 1024),
+                    'exists': True
+                }
+                
+                # Validate line count
+                if line_count < requirements['min_lines']:
+                    results['warnings'].append(
+                        f"⚠️  {filename} has only {line_count} lines "
+                        f"(expected >{requirements['min_lines']})"
+                    )
+                else:
+                    logger.info(f"✓ {filename}: {line_count} lines, {file_size/(1024*1024):.1f}MB")
+                    
+            except Exception as e:
+                results['warnings'].append(f"Error reading {filename}: {e}")
+                results['file_stats'][filename] = {'error': str(e)}
+        
+        if results['warnings']:
+            logger.warning(f"Data validation found {len(results['warnings'])} issues")
+            for warning in results['warnings']:
+                logger.warning(f"  {warning}")
+        else:
+            logger.info("✓ Data validation passed - all files present and valid")
+        
+        return results
     
     def setup_environment(self, codebase_path: Path, dependencies: List[str]) -> bool:
         """
@@ -114,6 +185,14 @@ class ExperimentRunner:
         # Prepare environment variables
         env = os.environ.copy()
         env.update(config.env_vars)
+        
+        # Set random seeds for reproducibility if configured
+        if hasattr(self, 'config') and 'random_seed' in self.config.get('experiment', {}):
+            seed = self.config['experiment']['random_seed']
+            if self.config['experiment'].get('set_environment_seeds', True):
+                env['PYTHONHASHSEED'] = str(seed)
+                env['RANDOM_SEED'] = str(seed)
+                logger.debug(f"Set PYTHONHASHSEED and RANDOM_SEED to {seed}")
         
         try:
             result = subprocess.run(

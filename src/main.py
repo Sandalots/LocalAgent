@@ -55,7 +55,7 @@ class ReproductionAgent:
         self.llm_client = OllamaClient(llm_config)
         self.paper_parser = PaperParser()
         self.code_analyzer = CodeAnalyzer(self.llm_client)
-        self.experiment_runner = ExperimentRunner(self.llm_client)
+        self.experiment_runner = ExperimentRunner(self.llm_client, config=self.config)
         self.result_evaluator = ResultEvaluator(
             self.llm_client,
             threshold=self.config['evaluation']['threshold']
@@ -170,6 +170,17 @@ class ReproductionAgent:
         logger.info(f"✓ Analyzed codebase (language: {codebase_info.language})")
         logger.info(f"✓ Found {len(codebase_info.entry_points)} potential entry points")
         logger.info(f"✓ Found {len(codebase_info.dependencies)} dependencies")
+        
+        # Validate data integrity before running experiments
+        logger.info("\n[3.5/5] Validating data integrity...")
+        validation_results = self.experiment_runner.validate_data_integrity(codebase_info.path)
+        
+        if not validation_results['valid']:
+            logger.warning("⚠️  Data validation failed - experiments may not reproduce correctly")
+        
+        if validation_results['file_stats']:
+            total_size = sum(s.get('size_mb', 0) for s in validation_results['file_stats'].values())
+            logger.info(f"✓ Data validation complete - {len(validation_results['file_stats'])} files, {total_size:.1f}MB total")
         
         # Step 5: Run experiments
         logger.info("\n[4/5] Running experiments...")

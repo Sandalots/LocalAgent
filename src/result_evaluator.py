@@ -193,7 +193,18 @@ class ResultEvaluator:
         Returns:
             BaselineMetrics with extracted values
         """
-        # First, try to parse report.md files for configuration-specific metrics
+        # PRIORITY 1: Use complete_results.json as ground truth baseline
+        # This is the actual data from the paper's experiments
+        if codebase_path:
+            json_metrics = self._extract_baseline_from_complete_results(codebase_path)
+            if json_metrics:
+                logger.info(f"✓ Using complete_results.json as baseline (ground truth)")
+                return BaselineMetrics(
+                    metrics=json_metrics,
+                    source="Extracted from complete_results.json (ground truth)"
+                )
+        
+        # FALLBACK: Try to parse report.md files for configuration-specific metrics
         if codebase_path:
             metrics = self._parse_report_files(codebase_path)
             if metrics:
@@ -244,6 +255,43 @@ JSON:"""
         except Exception as e:
             logger.error(f"Failed to extract baseline metrics: {e}")
             return BaselineMetrics(metrics={}, source="Extraction failed")
+    
+    def _extract_baseline_from_complete_results(self, codebase_path: Path) -> Dict[str, float]:
+        """
+        Extract baseline metrics directly from complete_results.json files.
+        This provides ground truth from the paper's actual experiments.
+        
+        Args:
+            codebase_path: Path to codebase
+            
+        Returns:
+            Dict of "experiment_set/config/retriever/metric" -> value
+        """
+        metrics = {}
+        
+        # Look for complete_results.json in output directories
+        output_dirs = [
+            "outputs_all_methods",
+            "outputs_all_methods_full",
+            "outputs_all_methods_oracle"
+        ]
+        
+        for dir_name in output_dirs:
+            results_path = codebase_path / dir_name / "complete_results.json"
+            if results_path.exists():
+                try:
+                    with open(results_path, 'r') as f:
+                        results = json.load(f)
+                    
+                    # Extract metrics using existing recursive function
+                    extracted = self._extract_metrics_from_nested_dict(results, prefix=dir_name)
+                    metrics.update(extracted)
+                    
+                    logger.info(f"✓ Extracted {len(extracted)} baseline metrics from {dir_name}/complete_results.json")
+                except Exception as e:
+                    logger.error(f"Failed to extract from {results_path}: {e}")
+        
+        return metrics
     
     def _parse_report_files(self, codebase_path: Path) -> Dict[str, float]:
         """
@@ -362,6 +410,15 @@ JSON:"""
         """
         comparisons = []
         
+        # Debug logging for metric matching
+        logger.debug(f"Baseline has {len(baseline.metrics)} metrics")
+        logger.debug(f"Reproduced has {len(reproduced)} metrics")
+        logger.debug(f"Sample baseline keys: {list(baseline.metrics.keys())[:3]}")
+        logger.debug(f"Sample reproduced keys: {list(reproduced.keys())[:3]}")
+        
+        matched_count = 0
+        unmatched_baseline = []
+        
         for baseline_key, baseline_value in baseline.metrics.items():
             # Parse baseline key
             # Format: outputs_all_methods/sentence/minimal/bm25/recall@10
@@ -407,7 +464,10 @@ JSON:"""
             
             if not matches:
                 logger.debug(f"No match found for baseline: {baseline_key}")
+                unmatched_baseline.append(baseline_key)
                 continue
+            
+            matched_count += 1
             
             # Create comparison for each match (usually just one)
             for config_path, reproduced_value in matches:
@@ -432,6 +492,12 @@ JSON:"""
                     within_threshold=within_threshold,
                     configuration=config_path
                 ))
+        
+        # Summary logging
+        logger.info(f"✓ Matched {matched_count}/{len(baseline.metrics)} baseline metrics")
+        if unmatched_baseline:
+            logger.warning(f"⚠️  {len(unmatched_baseline)} baseline metrics had no matches")
+            logger.debug(f"Unmatched: {unmatched_baseline[:5]}")
         
         return comparisons
     
