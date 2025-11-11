@@ -64,15 +64,6 @@ else
     echo "✅ Dependencies installed"
 fi
 
-# Run test
-echo ""
-echo "Testing setup..."
-python test_setup.py
-
-echo ""
-echo "=========================================================="
-echo "✨ Setup complete! You're ready to reproduce papers!"
-echo ""
 echo "Usage examples:"
 echo "  python src/main.py paper.pdf"
 echo "  python src/main.py paper.pdf --codebase https://github.com/user/repo"
