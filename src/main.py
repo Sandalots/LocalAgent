@@ -184,68 +184,64 @@ class ReproductionAgent:
         # Step 6: Evaluate results
         logger.info("\n[5/5] Evaluating results...")
         
-        # Try to extract baseline from paper
+        # Load ALL experiment results from all output directories
+        experiment_sets = self.result_evaluator.load_all_experiment_results(codebase_info.path)
+        
+        if not experiment_sets:
+            logger.error("No experiment result sets found")
+            return {'error': 'No experiment results found'}
+        
+        logger.info(f"✓ Loaded {len(experiment_sets)} experiment sets")
+        
+        # Extract all metrics from all experiments
+        all_reproduced_metrics = self.result_evaluator.extract_all_metrics_from_experiments(experiment_sets)
+        logger.info(f"✓ Extracted {len(all_reproduced_metrics)} total metrics from all experiments")
+        
+        # Try to extract baseline from paper AND report.md files
         baseline = self.result_evaluator.extract_baseline_from_paper(
-            paper_content.results or paper_content.raw_text
+            paper_content.results or paper_content.raw_text,
+            codebase_path=codebase_info.path  # Pass codebase path for report.md parsing
         )
-        logger.info(f"✓ Extracted {len(baseline.metrics)} baseline metrics from paper")
+        logger.info(f"✓ Extracted {len(baseline.metrics)} baseline metrics")
+        logger.info(f"  Source: {baseline.source}")
         
-        # If no baseline from paper, try to use report.md from experiment outputs
-        if not baseline.metrics and codebase_info:
-            report_path = codebase_info.path / "outputs_all_methods" / "report.md"
-            if report_path.exists():
-                logger.info("Attempting to extract baselines from experiment report.md...")
-                with open(report_path, 'r') as f:
-                    report_content = f.read()
-                    # Extract best performing metrics from report
-                    import re
-                    # Look for table rows with metrics
-                    metrics_from_report = {}
-                    for match in re.finditer(r'\|\s*\w+\s*\|\s*[\w/]+\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|', report_content):
-                        recall, mrr = match.groups()
-                        metrics_from_report['recall@10'] = float(recall)
-                        metrics_from_report['mrr'] = float(mrr)
-                        break  # Use first (best) row
-                    
-                    if metrics_from_report:
-                        baseline = BaselineMetrics(
-                            metrics=metrics_from_report,
-                            source="Extracted from experiment report.md (best config)"
-                        )
-                        logger.info(f"✓ Extracted {len(baseline.metrics)} baseline metrics from report")
+        # Compare all reproduced metrics to baseline
+        comparisons = self.result_evaluator.compare_results(baseline, all_reproduced_metrics)
+        logger.info(f"✓ Generated {len(comparisons)} metric comparisons")
         
-        # Aggregate reproduced metrics
-        reproduced_metrics = {}
-        for result in experiment_results:
-            if result.outputs:
-                for key, value in result.outputs.items():
-                    if isinstance(value, dict):
-                        # Handle nested structures from complete_results.json
-                        extracted = self._extract_metrics_from_nested_dict(value)
-                        reproduced_metrics.update(extracted)
-        
-        logger.info(f"✓ Extracted {len(reproduced_metrics)} reproduced metrics")
-        
-        if not reproduced_metrics:
-            logger.warning("No metrics extracted from experiment outputs")
-        
-        comparisons = self.result_evaluator.compare_results(baseline, reproduced_metrics)
-        
-        # Generate report
+        # Generate comprehensive report
         report = self.result_evaluator.generate_report(comparisons)
         logger.info("\n" + report)
         
+        # Generate summary statistics
+        summary_stats = self.result_evaluator.generate_summary_statistics(comparisons)
+        logger.info(summary_stats)
+        
         # Get LLM analysis of differences
+        analysis = ""
         if comparisons:
             logger.info("\n[LLM Analysis] Analyzing result differences...")
             analysis = self.result_evaluator.analyze_differences_with_llm(
                 comparisons,
                 paper_content.methodology + "\n" + paper_content.experiments
             )
-            logger.info("\n" + analysis)
+            logger.info("\nLLM ANALYSIS:")
+            logger.info(analysis)
+        
+        # Generate comprehensive conclusions and recommendations
+        logger.info("\n[Generating Conclusions] Creating comprehensive analysis...")
+        conclusions = self.result_evaluator.generate_comprehensive_conclusions(
+            comparisons,
+            experiment_sets,
+            baseline,
+            paper_content.methodology + "\n" + paper_content.experiments
+        )
+        logger.info(conclusions)
+
         
         # Save results
-        self._save_results(paper_path, comparisons, report, analysis if comparisons else "")
+        self._save_results(paper_path, comparisons, report, summary_stats, 
+                          analysis, conclusions, experiment_sets)
         
         logger.info("\n" + "="*70)
         logger.info("Reproduction workflow completed!")
@@ -257,7 +253,8 @@ class ReproductionAgent:
             'experiment_results': experiment_results,
             'baseline_metrics': baseline,
             'comparisons': comparisons,
-            'report': report
+            'report': report,
+            'conclusions': conclusions
         }
     
     def _extract_paper_sections(self, raw_text: str) -> dict:
@@ -452,16 +449,22 @@ Return ONLY a JSON object (no markdown, no explanation):
         return results
     
     def _save_results(self, paper_path: Path, comparisons: list, 
-                     report: str, analysis: str):
+                     report: str, summary_stats: str, analysis: str,
+                     conclusions: str, experiment_sets: list):
         """Save results to output directory."""
         output_file = self.output_dir / f"{paper_path.stem}_results.txt"
         
         with open(output_file, 'w') as f:
             f.write(f"Results for: {paper_path.name}\n")
+            f.write(f"Experiment sets analyzed: {len(experiment_sets)}\n")
+            f.write(f"Total comparisons: {len(comparisons)}\n")
             f.write("\n" + report + "\n\n")
+            f.write(summary_stats + "\n\n")
             if analysis:
                 f.write("LLM ANALYSIS:\n")
-                f.write(analysis + "\n")
+                f.write(analysis + "\n\n")
+            if conclusions:
+                f.write(conclusions + "\n")
         
         logger.info(f"✓ Results saved to: {output_file}")
 
