@@ -17,7 +17,11 @@ A local LLM-powered agent that reproduces research paper experiments using Ollam
    pip install -r requirements.txt
    ```
 
-3. **Run the agent:**
+3. **Place paper code in the correct directory:**
+   - Put the `supplementary_material` directory inside `paper_source_code/`
+   - Final structure: `paper_source_code/supplementary_material/`
+
+4. **Run the agent:**
    ```bash
    python3 run.py
    ```

@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Simple runner for workspace with paper/ and paper_source_code/ directories.
-Just run: python run.py
-"""
-
 import sys
 from pathlib import Path
 

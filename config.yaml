@@ -1,5 +1,3 @@
-# Configuration file for Local Research Paper Reproduction Agent
-
 ollama:
   base_url: "http://localhost:11434"
   model: "llama3" 
