@@ -32,7 +32,7 @@ The agent uses the following **4-stage pipeline**:
 
 4. **Run the agent:**
    ```bash
-   python3 run.py
+   python3 run_EVALLab.py
    ```
 
 ## Performance
