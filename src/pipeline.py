@@ -1,5 +1,5 @@
 """===============================================================================
-EVALLAB PIPELINE ORCHESTRATOR
+EVALLAB PIPELINE ORCHESTRATOR (PIPELINES THE 4 STAGES)
 
 Coordinates all 4 stages: Paper Parsing → Code Retrieval → Experiment Execution → Result Evaluation.
 ===============================================================================
