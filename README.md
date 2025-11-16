@@ -23,11 +23,11 @@ The agent uses the following **4-stage pipeline**:
    pip install -r requirements.txt
    ```
 
-3. **Place paper code in the correct directory:**
+3. **Place paper code in the correct directory if paper is known not to have an embedded linked repo link:**
    - Put the `supplementary_material` directory inside `paper_source_code/`
    - Final structure: `paper_source_code/supplementary_material/`
 
-4. **Run the agent:**
+4. **Run EVALLab:**
    ```bash
    python3 run_EVALLab.py
    ```
