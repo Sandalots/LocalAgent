@@ -1,10 +1,9 @@
-"""
-Repository Retriever Module - Stage 2
+"""===============================================================================
+EVALLAB STAGE 2/4: CODE RETRIEVAL
 
-Handles finding and retrieving code repositories from:
-1. GitHub URLs found in the paper
-2. Local paper_source_code directory
-3. User-provided paths
+Locates experiment codebase via: user path → local directory → GitHub clone.
+Outputs local codebase path for Stage 3 (Experiment Execution).
+===============================================================================
 """
 
 import logging

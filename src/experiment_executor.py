@@ -1,10 +1,9 @@
-"""
-Experiment Executor Module - Stage 3
+"""===============================================================================
+EVALLAB STAGE 3/4: EXPERIMENT EXECUTION
 
-Combined module that:
-1. Analyzes codebase structure and dependencies
-2. Sets up execution environment  
-3. Runs experiments and captures results
+Analyzes codebase, sets up isolated environment, runs experiments.
+Outputs reproduced metrics (JSON) for Stage 4 (Result Evaluation).
+===============================================================================
 """
 
 import os

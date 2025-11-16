@@ -1,7 +1,9 @@
-"""
-Paper Parser Module
+"""===============================================================================
+EVALLAB STAGE 1/4: PAPER PARSING
 
-Extracts abstract, methodology, and experiment details from research papers (PDFs).
+Extracts text, metadata, and GitHub URLs from research paper PDFs.
+Outputs structured content for Stage 2 (Code Retrieval).
+===============================================================================
 """
 
 import re

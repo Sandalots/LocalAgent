@@ -1,7 +1,9 @@
-"""
-Result Evaluator Module
+"""===============================================================================
+EVALLAB STAGE 4/4: RESULT EVALUATION
 
-Compares experiment results to baseline metrics from the paper.
+Compares reproduced metrics to baseline, generates analysis and visualizations.
+Final output: comprehensive reproducibility assessment with charts and reports.
+===============================================================================
 """
 
 import logging
