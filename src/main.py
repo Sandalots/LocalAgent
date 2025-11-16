@@ -8,6 +8,7 @@ Includes integrated Ollama LLM client functionality.
 
 import logging
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 import yaml
@@ -195,7 +196,7 @@ class ReproductionAgent:
             'experiment': {'timeout': 3600, 'max_retries': 2, 'use_venv': True},
             'evaluation': {'threshold': 0.05},
             'paths': {
-                'temp_dir': '/tmp/paper_reproduction',
+                'temp_dir': str(Path(tempfile.gettempdir()) / 'paper_reproduction'),
                 'output_dir': './outputs',
                 'cache_dir': './.cache'
             }

@@ -25,6 +25,6 @@ evaluation:
     - loss
 
 paths:
-  temp_dir: "/tmp/paper_reproduction"
+  temp_dir: "./temp"
   output_dir: "./outputs"
   cache_dir: "./.cache"

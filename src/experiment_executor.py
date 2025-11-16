@@ -8,6 +8,8 @@ Combined module that:
 """
 
 import os
+import sys
+import platform
 import subprocess
 import logging
 from pathlib import Path
@@ -17,6 +19,41 @@ import json
 import time
 
 logger = logging.getLogger(__name__)
+
+
+def _get_python_executable():
+    """Get the appropriate Python executable for the current platform."""
+    if platform.system() == 'Windows':
+        # Try python first, then py launcher
+        for cmd in ['python', 'py']:
+            try:
+                result = subprocess.run([cmd, '--version'], capture_output=True, text=True)
+                if result.returncode == 0:
+                    return cmd
+            except FileNotFoundError:
+                continue
+        return 'python'  # fallback
+    else:
+        # Unix/macOS - prefer python3
+        return 'python3'
+
+
+def _get_venv_paths(venv_path: Path):
+    """Get platform-specific paths for venv executables.
+    
+    Returns:
+        Tuple of (python_executable, pip_executable, scripts_dir)
+    """
+    if platform.system() == 'Windows':
+        scripts_dir = venv_path / 'Scripts'
+        python_exe = scripts_dir / 'python.exe'
+        pip_exe = scripts_dir / 'pip.exe'
+    else:
+        scripts_dir = venv_path / 'bin'
+        python_exe = scripts_dir / 'python'
+        pip_exe = scripts_dir / 'pip'
+    
+    return python_exe, pip_exe, scripts_dir
 
 
 @dataclass
@@ -306,8 +343,9 @@ class ExperimentExecutor:
         if not venv_path.exists():
             logger.info("Creating virtual environment...")
             try:
+                python_cmd = _get_python_executable()
                 subprocess.run(
-                    ['python3', '-m', 'venv', str(venv_path)],
+                    [python_cmd, '-m', 'venv', str(venv_path)],
                     check=True,
                     capture_output=True
                 )
@@ -317,7 +355,7 @@ class ExperimentExecutor:
         
         # Install dependencies
         if dependencies:
-            pip_executable = venv_path / 'bin' / 'pip'
+            _, pip_executable, _ = _get_venv_paths(venv_path)
             logger.info(f"Installing {len(dependencies)} dependencies...")
             logger.info("⏳ This may take a few minutes depending on package sizes...")
             logger.info(f"   (Timeout: 10 minutes)")
@@ -359,8 +397,9 @@ class ExperimentExecutor:
         
         start_time = time.time()
         
-        # Prepare command
-        cmd = ['python3', str(config.script_path)] + config.args
+        # Prepare command with platform-specific Python
+        python_cmd = _get_python_executable()
+        cmd = [python_cmd, str(config.script_path)] + config.args
         
         # Prepare environment variables
         env = os.environ.copy()
