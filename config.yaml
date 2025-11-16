@@ -2,7 +2,7 @@
 
 ollama:
   base_url: "http://localhost:11434"
-  model: "llama3"  # Options: llama3, mistral, codellama, etc.
+  model: "llama3" 
   temperature: 0.7
   timeout: 120
 
@@ -11,14 +11,14 @@ logging:
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 experiment:
-  timeout: 3600  # seconds
+  timeout: 3600
   max_retries: 2
   use_venv: true
-  random_seed: 42  # Set random seed for reproducibility
-  set_environment_seeds: true  # Set PYTHONHASHSEED and other env seeds
+  random_seed: 42 
+  set_environment_seeds: true 
 
 evaluation:
-  threshold: 0.05  # 5% acceptable difference
+  threshold: 0.05 
   metrics_of_interest:
     - accuracy
     - f1_score
