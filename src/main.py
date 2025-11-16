@@ -24,10 +24,50 @@ from experiment_executor import ExperimentExecutor, CodebaseInfo, ExperimentConf
 from result_evaluator import ResultEvaluator, BaselineMetrics
 
 
-# Set up logging
+# Custom colored logging formatter
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter with colors for different log levels."""
+    
+    # ANSI color codes
+    COLORS = {
+        'DEBUG': '\033[36m',      # Cyan
+        'INFO': '\033[92m',       # Green
+        'WARNING': '\033[93m',    # Yellow
+        'ERROR': '\033[91m',      # Red
+        'CRITICAL': '\033[95m',   # Magenta
+    }
+    RESET = '\033[0m'
+    
+    # Color for different parts
+    TIME_COLOR = '\033[90m'       # Gray
+    NAME_COLOR = '\033[94m'       # Blue
+    LEVEL_COLORS = COLORS
+    
+    def format(self, record):
+        # Color the timestamp
+        timestamp = self.formatTime(record, self.datefmt)
+        colored_time = f"{self.TIME_COLOR}{timestamp}{self.RESET}"
+        
+        # Color the logger name
+        colored_name = f"{self.NAME_COLOR}{record.name}{self.RESET}"
+        
+        # Color the level name
+        level_color = self.LEVEL_COLORS.get(record.levelname, self.RESET)
+        colored_level = f"{level_color}{record.levelname}{self.RESET}"
+        
+        # Color the message based on level
+        message_color = self.LEVEL_COLORS.get(record.levelname, self.RESET)
+        colored_message = f"{message_color}{record.getMessage()}{self.RESET}"
+        
+        return f"{colored_time} - {colored_name} - {colored_level} - {colored_message}"
+
+
+# Set up colored logging
+handler = logging.StreamHandler()
+handler.setFormatter(ColoredFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    handlers=[handler]
 )
 logger = logging.getLogger(__name__)
 
@@ -333,8 +373,31 @@ class ReproductionAgent:
         )
         
         if not codebase_path:
+            print("\n" + "="*80)
+            print("\033[91m┌" + "─"*78 + "┐\033[0m")
+            print("\033[91m│\033[0m" + "\033[1;91m ❌ NO CODEBASE FOUND".center(78) + "\033[91m│\033[0m")
+            print("\033[91m├" + "─"*78 + "┤\033[0m")
+            print("\033[91m│\033[0m" + " Unable to find experiment code from any source.".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + " 💡 SOLUTION: Manually add codebase to ./paper_source_code/".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   Steps:".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   1. Create ./paper_source_code/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   2. Place your experiment codebase inside it".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   3. Run the agent again".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + " Checked:".ljust(78) + "\033[91m│\033[0m")
+            if local_path:
+                print("\033[91m│\033[0m" + f"   ✗ User path: {local_path}".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   ✗ Local directory: ./paper_source_code/".ljust(78) + "\033[91m│\033[0m")
+            if paper_content.github_urls:
+                print("\033[91m│\033[0m" + f"   ✗ GitHub URLs: {len(paper_content.github_urls)} found but failed to clone".ljust(78) + "\033[91m│\033[0m")
+            else:
+                print("\033[91m│\033[0m" + "   ✗ GitHub URLs: None found in paper".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m└" + "─"*78 + "┘\033[0m")
+            print("="*80 + "\n")
             logger.error("No codebase available!")
-            return {'error': 'No codebase available'}
+            return {'error': 'No codebase available - please add code to ./paper_source_code/'}
         
         logger.info(f"✓ Codebase retrieved at: {codebase_path}")
         
@@ -416,22 +479,46 @@ class ReproductionAgent:
         logger.info("\n" + report)
         
         # Generate summary statistics
+        print("\n" + "="*80)
+        print("\033[93m┌" + "─"*78 + "┐\033[0m")
+        print("\033[93m│\033[0m" + "\033[1;93m 📊 SUMMARY STATISTICS".center(78) + "\033[93m│\033[0m")
+        print("\033[93m├" + "─"*78 + "┤\033[0m")
+        print("\033[93m│\033[0m" + " 📈 Performance metrics and success rates".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" + " 🎯 Deviation analysis and accuracy scores".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
         summary_stats = self.result_evaluator.generate_summary_statistics(comparisons)
         logger.info(summary_stats)
         
         # Get LLM analysis of differences
         analysis = ""
         if comparisons:
-            logger.info("\n[LLM Analysis] Analyzing result differences...")
+            print("\n" + "="*80)
+            print("\033[94m┌" + "─"*78 + "┐\033[0m")
+            print("\033[94m│\033[0m" + "\033[1;94m 🤖 LLM ANALYSIS".center(78) + "\033[94m│\033[0m")
+            print("\033[94m├" + "─"*78 + "┤\033[0m")
+            print("\033[94m│\033[0m" + " 🧠 AI-powered analysis of result differences".ljust(78) + "\033[94m│\033[0m")
+            print("\033[94m│\033[0m" + " 💡 Insights into methodology and experiment variations".ljust(78) + "\033[94m│\033[0m")
+            print("\033[94m└" + "─"*78 + "┘\033[0m")
+            print("="*80 + "\n")
+            
             analysis = self.result_evaluator.analyze_differences_with_llm(
                 comparisons,
                 paper_content.methodology + "\n" + paper_content.experiments
             )
-            logger.info("\nLLM ANALYSIS:")
             logger.info(analysis)
         
         # Generate comprehensive conclusions and recommendations
-        logger.info("\n[Generating Conclusions] Creating comprehensive analysis...")
+        print("\n" + "="*80)
+        print("\033[92m┌" + "─"*78 + "┐\033[0m")
+        print("\033[92m│\033[0m" + "\033[1;92m 📋 CONCLUSIONS & RECOMMENDATIONS".center(78) + "\033[92m│\033[0m")
+        print("\033[92m├" + "─"*78 + "┤\033[0m")
+        print("\033[92m│\033[0m" + " ✅ Comprehensive analysis of reproduction success".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" + " 🔍 Key findings and improvement recommendations".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
         conclusions = self.result_evaluator.generate_comprehensive_conclusions(
             comparisons,
             experiment_sets,
@@ -441,7 +528,15 @@ class ReproductionAgent:
         logger.info(conclusions)
         
         # Generate visualizations
-        logger.info("\n[Generating Visualizations] Creating plots and charts...")
+        print("\n" + "="*80)
+        print("\033[95m┌" + "─"*78 + "┐\033[0m")
+        print("\033[95m│\033[0m" + "\033[1;95m 📊 VISUALIZATION GENERATION".center(78) + "\033[95m│\033[0m")
+        print("\033[95m├" + "─"*78 + "┤\033[0m")
+        print("\033[95m│\033[0m" + " 📈 Creating charts: bar, scatter, heatmap, histogram".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" + " 🎨 Generating HTML dashboard and CSV exports".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
         try:
             viz_dir = Path('outputs') / 'visualizations'
             paper_name = paper_path.stem  # Get filename without extension
@@ -462,9 +557,15 @@ class ReproductionAgent:
         self._save_results(paper_path, comparisons, report, summary_stats, 
                           analysis, conclusions, experiment_sets)
         
-        logger.info("\n" + "="*70)
-        logger.info("Reproduction workflow completed!")
-        logger.info("="*70)
+        print("\n" + "="*80)
+        print("\033[92m┌" + "─"*78 + "┐\033[0m")
+        print("\033[92m│\033[0m" + "\033[1;92m ✅ WORKFLOW COMPLETED SUCCESSFULLY!".center(78) + "\033[92m│\033[0m")
+        print("\033[92m├" + "─"*78 + "┤\033[0m")
+        print("\033[92m│\033[0m" + " 🎉 All 4 stages completed".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" + " 📁 Results saved to outputs/ directory".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" + " 📊 Visualizations available in outputs/visualizations/".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
         
         return {
             'paper_content': paper_content,

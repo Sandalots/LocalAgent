@@ -321,6 +321,8 @@ class ExperimentExecutor:
         if dependencies:
             pip_executable = venv_path / 'bin' / 'pip'
             logger.info(f"Installing {len(dependencies)} dependencies...")
+            logger.info("⏳ This may take a few minutes depending on package sizes...")
+            logger.info(f"   (Timeout: 10 minutes)")
             
             try:
                 subprocess.run(

@@ -1,15 +1,15 @@
 # Local Research Paper Reproduction Agent 🔬
 
-A local LLM-powered agent that reproduces research paper experiments using Ollama. Features a clean 4-stage architecture with 94.2% metric reproduction accuracy.
+A local LLM-powered agent that reproduces research paper experiments using Ollama. Features a clean 4-stage architecture with 94.2% metric reproduction accuracy currently on the 'Decontextualization' Research Paper.
 
 ## Architecture
 
 The agent uses a **4-stage pipeline**:
 
-1. **Stage 1: Paper Parser** - Extracts text, figures, and GitHub URLs from PDFs
-2. **Stage 2: Repo Retriever** - Finds code (local → GitHub priority)
+1. **Stage 1: Paper Parser** - Extracts text, figures, and GitHub URLs from Research Paper PDFs
+2. **Stage 2: Repo Retriever** - Finds codebase (local → GitHub priority)
 3. **Stage 3: Experiment Executor** - Analyzes codebase + runs experiments
-4. **Stage 4: Result Evaluator** - Compares results + generates visualizations
+4. **Stage 4: Result Evaluator** - Compares results + generates visualizations from baseline paper authors results
 
 ## Quick Start
 
@@ -37,4 +37,4 @@ The agent uses a **4-stage pipeline**:
 
 ## Performance
 
-**94.2% success rate** (339/360 metrics matched) with 1.05% mean deviation from baseline results.
+**94.2% success rate** (339/360 metrics matched) with 1.05% mean deviation from baseline results currently when fed the 'Decontextualization' paper.
