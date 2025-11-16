@@ -36,7 +36,7 @@ def main():
     print("\033[1;92m│\033[0m" + "\033[1;97m 4-STAGE REPRODUCTION PIPELINE\033[0m".center(98) + "\033[1;92m│\033[0m")
     print("\033[1;92m├" + "─" * 98 + "┤\033[0m")
     print("\033[1;92m│\033[0m" + " ".ljust(98) + "\033[1;92m│\033[0m")
-    print("\033[1;92m│\033[0m" + "   \033[1;94m[1] PAPER PARSING\033[0m       → Extract text, figures, GitHub URLs from PDF".ljust(98) + "\033[1;92m│\033[0m")
+    print("\033[1;92m│\033[0m" + "   \033[1;94m[1] PAPER PARSING\033[0m       → Extracts text, (Abstract, methodology, experiment, figures) from the input Research Paper".ljust(98) + "\033[1;92m│\033[0m")
     print("\033[1;92m│\033[0m" + "   \033[1;94m[2] CODE RETRIEVAL\033[0m      → Find code (local → GitHub) with smart detection".ljust(98) + "\033[1;92m│\033[0m")
     print("\033[1;92m│\033[0m" + "   \033[1;94m[3] EXPERIMENT RUN\033[0m      → Analyze codebase, setup environment, execute experiments".ljust(98) + "\033[1;92m│\033[0m")
     print("\033[1;92m│\033[0m" + "   \033[1;94m[4] RESULT EVALUATION\033[0m   → Compare metrics, generate visualizations & reports".ljust(98) + "\033[1;92m│\033[0m")

@@ -8,10 +8,9 @@ Outputs structured content for Stage 2 (Code Retrieval).
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 import PyPDF2
 from dataclasses import dataclass
-
 
 @dataclass
 class PaperContent:
@@ -23,68 +22,53 @@ class PaperContent:
     results: Optional[str] = None
     github_urls: List[str] = None
     raw_text: str = ""
-    
+
     def __post_init__(self):
         if self.github_urls is None:
             self.github_urls = []
 
-
 class PaperParser:
     """Parse research papers and extract key sections."""
-    
     def __init__(self):
         self.github_pattern = re.compile(
             r'https?://github\.com/[\w\-]+/[\w\-\.]+',
             re.IGNORECASE
         )
-    
+
     def parse_pdf(self, pdf_path: Path) -> PaperContent:
         """
         Parse a PDF file and extract text content.
-        
+
         Args:
             pdf_path: Path to the PDF file
-            
+
         Returns:
             PaperContent object with extracted information
         """
         content = PaperContent()
-        
+
         try:
             with open(pdf_path, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
-                
+
                 # Extract all text
                 text_parts = []
                 for page in pdf_reader.pages:
                     text_parts.append(page.extract_text())
-                
+
                 content.raw_text = "\n".join(text_parts)
-                
+
                 # Extract GitHub URLs
                 content.github_urls = self._extract_github_urls(content.raw_text)
-                
+
         except Exception as e:
             raise ValueError(f"Error parsing PDF: {e}")
-        
+
         return content
-    
+
     def _extract_github_urls(self, text: str) -> List[str]:
         """Extract GitHub repository URLs from text."""
         urls = self.github_pattern.findall(text)
         # Remove duplicates while preserving order
         return list(dict.fromkeys(urls))
-    
-    def extract_sections_with_llm(self, raw_text: str, llm_client) -> Dict[str, str]:
-        """
-        Use LLM to identify and extract paper sections.
-        
-        Args:
-            raw_text: Raw text from the paper
-            llm_client: Ollama LLM client instance
-            
-        Returns:
-            Dictionary with extracted sections (abstract, methodology, experiments, results)
-        """
-        # This will be implemented with the LLM client
-        pass
+

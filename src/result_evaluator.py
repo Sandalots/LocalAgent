@@ -7,21 +7,18 @@ Final output: comprehensive reproducibility assessment with charts and reports.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from dataclasses import dataclass
 from pathlib import Path
 import json
 
-
 logger = logging.getLogger(__name__)
-
 
 @dataclass
 class BaselineMetrics:
     """Baseline metrics from the research paper."""
     metrics: Dict[str, float]
     source: str  # Where in the paper these came from
-    
     
 @dataclass
 class ComparisonResult:
@@ -34,7 +31,6 @@ class ComparisonResult:
     within_threshold: bool
     configuration: str = ""  # e.g., "sentence/minimal/bm25"
 
-
 @dataclass
 class ExperimentSet:
     """A complete set of experiment results."""
@@ -42,7 +38,6 @@ class ExperimentSet:
     results: Dict[str, Any]  # The complete results dict
     total_configs: int
     total_metrics: int
-
 
 class ResultEvaluator:
     """Evaluate reproduced results against paper baselines."""
@@ -160,13 +155,10 @@ class ResultEvaluator:
             current_key = f"{prefix}/{key}" if prefix else key
             
             if isinstance(value, dict):
-                # Check if this dict contains metrics
                 if 'metrics' in value:
-                    # Extract metrics from this level
                     metric_dict = value['metrics']
                     for metric_name, metric_value in metric_dict.items():
                         if isinstance(metric_value, dict):
-                            # Handle metrics with multiple thresholds (e.g., recall@1, recall@5)
                             for threshold, val in metric_value.items():
                                 if isinstance(val, (int, float)):
                                     full_key = f"{current_key}/{metric_name}@{threshold}"
@@ -217,7 +209,6 @@ class ResultEvaluator:
                     source="Extracted from complete_results.json (same as reproduced)"
                 )
         
-        # Fallback to LLM extraction from paper
         if not self.llm_client:
             logger.warning("No LLM client and no report.md found")
             return BaselineMetrics(metrics={}, source="No extraction method available")
@@ -273,7 +264,6 @@ JSON:"""
         """
         metrics = {}
         
-        # Look for complete_results.json in output directories
         output_dirs = [
             "outputs_all_methods",
             "outputs_all_methods_full",
@@ -287,7 +277,6 @@ JSON:"""
                     with open(results_path, 'r') as f:
                         results = json.load(f)
                     
-                    # Extract metrics using existing recursive function
                     extracted = self._extract_metrics_from_nested_dict(results, prefix=dir_name)
                     metrics.update(extracted)
                     
@@ -309,7 +298,6 @@ JSON:"""
         """
         metrics = {}
         
-        # Look for report.md in output directories
         output_dirs = [
             "outputs_all_methods",
             "outputs_all_methods_full",
@@ -357,7 +345,6 @@ JSON:"""
         
         lines = content.split('\n')
         for line in lines:
-            # Look for configuration headers (###)
             config_match = re.match(r'^###\s+(\w+/\w+)', line)
             if config_match:
                 current_config = config_match.group(1)
@@ -375,7 +362,6 @@ JSON:"""
                     continue
             
             if current_config and current_task_type:
-                # Look for retrieval metrics like "bm25: Recall@10=0.458, MRR=0.252"
                 retrieval_match = re.search(
                     r'(\w+):\s+Recall@10=([\d.]+)(?:.*?)MRR=([\d.]+)',
                     line
@@ -385,13 +371,11 @@ JSON:"""
                     recall = float(retrieval_match.group(2))
                     mrr = float(retrieval_match.group(3))
                     
-                    # Store with task type and retriever in key: sentence/minimal/retrieval/bm25
                     base_key = f"{current_config}/{current_task_type}/{retriever}"
                     metrics_by_config.setdefault(base_key, {})
                     metrics_by_config[base_key]['recall@10'] = recall
                     metrics_by_config[base_key]['mrr'] = mrr
                 
-                # Look for downstream task metrics like "bm25: Accuracy=0.425, F1=0.567"
                 task_match = re.search(
                     r'(\w+):\s+Accuracy=([\d.]+)(?:.*?)F1=([\d.]+)',
                     line
@@ -401,7 +385,6 @@ JSON:"""
                     accuracy = float(task_match.group(2))
                     f1 = float(task_match.group(3))
                     
-                    # Store with task type and retriever in key: sentence/minimal/downstream/bm25
                     base_key = f"{current_config}/{current_task_type}/{retriever}"
                     metrics_by_config.setdefault(base_key, {})
                     metrics_by_config[base_key]['accuracy'] = accuracy
@@ -441,19 +424,15 @@ JSON:"""
                 reproduced_value = reproduced[baseline_key]
                 matched_count += 1
                 
-                # Calculate difference
                 difference = reproduced_value - baseline_value
                 
-                # Calculate percent difference (handle divide by zero)
                 if baseline_value != 0:
                     percent_diff = (difference / abs(baseline_value)) * 100
                 else:
                     percent_diff = float('inf') if difference != 0 else 0
                 
-                # Check if within threshold
                 within_threshold = abs(percent_diff) <= (self.threshold * 100)
                 
-                # Extract metric name from key for display
                 metric_name = baseline_key.split('/')[-1]
                 
                 comparisons.append(ComparisonResult(
@@ -466,7 +445,6 @@ JSON:"""
                     configuration=baseline_key
                 ))
             else:
-                # If exact match fails, try the fuzzy matching logic
                 baseline_parts = baseline_key.split('/')
                 
                 if len(baseline_parts) < 5:
@@ -482,7 +460,6 @@ JSON:"""
                 metric_name = baseline_parts[5] if len(baseline_parts) > 5 else None  # e.g., recall@10, accuracy
                 
                 # Normalize metric names for fuzzy matching
-                # Handle variations: f1 <-> f1_score, accuracy <-> accuracy, etc.
                 metric_variants = [metric_name] if metric_name else []
                 if metric_name:
                     if metric_name == 'f1':
@@ -501,18 +478,14 @@ JSON:"""
                 # but reproduced might be: downstream/bm25/answerability/accuracy
                 search_patterns = []
                 if task_type == 'downstream' and metric_name:
-                    # Try with answerability subtask first (most common)
                     search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/answerability/{metric_name}")
-                    # Try with f1 -> f1_score variant
                     if metric_name == 'f1':
                         search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/answerability/f1_score")
-                    # Also try without subtask (direct match)
                     search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/{metric_name}")
                 elif metric_name:
                     # For retrieval, direct match
                     search_patterns.append(f"{exp_set}/{granularity}/{strategy}/{task_type}/{retriever}/{metric_name}")
                 
-                # Try exact pattern matches first
                 for pattern in search_patterns:
                     if pattern in reproduced:
                         matches.append((pattern, reproduced[pattern]))
@@ -530,7 +503,6 @@ JSON:"""
                                 retriever in repro_key):
                             continue
                         
-                        # Check if metric name matches (handle f1/f1_score variants)
                         if metric_name:
                             if repro_key.endswith(metric_name):
                                 matches.append((repro_key, repro_value))
@@ -549,18 +521,14 @@ JSON:"""
                 
                 matched_count += 1
                 
-                # Create comparison for each match (usually just one)
                 for config_path, reproduced_value in matches:
-                    # Calculate difference
                     difference = reproduced_value - baseline_value
                     
-                    # Calculate percent difference (handle divide by zero)
                     if baseline_value != 0:
                         percent_diff = (difference / abs(baseline_value)) * 100
                     else:
                         percent_diff = float('inf') if difference != 0 else 0
                     
-                    # Check if within threshold
                     within_threshold = abs(percent_diff) <= (self.threshold * 100)
                     
                     comparisons.append(ComparisonResult(
@@ -1178,12 +1146,9 @@ Provide a concise analysis (3-4 paragraphs)."""
                    f'{int(height)} ({height/total*100:.1f}%)',
                    ha='center', va='bottom', fontsize=11)
         
-        plt.tight_layout()
         file_path = output_dir / 'overall_performance.png'
-        plt.savefig(file_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        generated_files['overall_performance'] = file_path
-        logger.info(f"✓ Generated overall performance chart: {file_path}")
+        plt.tight_layout(); plt.savefig(file_path, dpi=300, bbox_inches="tight"); plt.close()
+        generated_files['overall_performance'] = file_path; logger.info(f'✓ Generated: {file_path}')
         
         # 2. Performance by Configuration
         fig, ax = plt.subplots(figsize=(14, 8))
@@ -1207,17 +1172,13 @@ Provide a concise analysis (3-4 paragraphs)."""
         ax.axvline(x=90, color='orange', linestyle='--', alpha=0.3, label='90% threshold')
         ax.legend()
         
-        # Add value labels
         for i, (bar, val) in enumerate(zip(bars, config_stats['success_rate'])):
             ax.text(val + 1, bar.get_y() + bar.get_height()/2, 
                    f'{val:.1f}%', va='center', fontsize=9)
         
-        plt.tight_layout()
         file_path = output_dir / 'performance_by_configuration.png'
-        plt.savefig(file_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        generated_files['performance_by_configuration'] = file_path
-        logger.info(f"✓ Generated configuration performance chart: {file_path}")
+        plt.tight_layout(); plt.savefig(file_path, dpi=300, bbox_inches="tight"); plt.close()
+        generated_files['performance_by_configuration'] = file_path; logger.info(f'✓ Generated: {file_path}')
         
         # 3. Scatter Plot: Baseline vs Reproduced Values
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -1246,12 +1207,9 @@ Provide a concise analysis (3-4 paragraphs)."""
         ax.legend()
         ax.grid(True, alpha=0.3)
         
-        plt.tight_layout()
         file_path = output_dir / 'baseline_vs_reproduced.png'
-        plt.savefig(file_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        generated_files['baseline_vs_reproduced'] = file_path
-        logger.info(f"✓ Generated scatter plot: {file_path}")
+        plt.tight_layout(); plt.savefig(file_path, dpi=300, bbox_inches="tight"); plt.close()
+        generated_files['baseline_vs_reproduced'] = file_path; logger.info(f'✓ Generated: {file_path}')
         
         # 4. Distribution of Percent Differences
         fig, ax = plt.subplots(figsize=(12, 6))
@@ -1269,12 +1227,9 @@ Provide a concise analysis (3-4 paragraphs)."""
         ax.set_title('Distribution of Metric Deviations', fontsize=14, fontweight='bold')
         ax.legend()
         
-        plt.tight_layout()
         file_path = output_dir / 'deviation_distribution.png'
-        plt.savefig(file_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        generated_files['deviation_distribution'] = file_path
-        logger.info(f"✓ Generated deviation distribution: {file_path}")
+        plt.tight_layout(); plt.savefig(file_path, dpi=300, bbox_inches="tight"); plt.close()
+        generated_files['deviation_distribution'] = file_path; logger.info(f'✓ Generated: {file_path}')
         
         # 5. Heatmap: Performance by Granularity and Task Type
         if 'granularity' in df.columns and 'task_type' in df.columns:
@@ -1294,12 +1249,9 @@ Provide a concise analysis (3-4 paragraphs)."""
             ax.set_xlabel('Task Type', fontsize=12)
             ax.set_ylabel('Granularity', fontsize=12)
             
-            plt.tight_layout()
             file_path = output_dir / 'heatmap_granularity_tasktype.png'
-            plt.savefig(file_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            generated_files['heatmap_granularity_tasktype'] = file_path
-            logger.info(f"✓ Generated heatmap: {file_path}")
+            plt.tight_layout(); plt.savefig(file_path, dpi=300, bbox_inches="tight"); plt.close()
+            generated_files['heatmap_granularity_tasktype'] = file_path; logger.info(f'✓ Generated: {file_path}')
         
         # 6. Summary Statistics Table
         summary_data = {
@@ -1350,12 +1302,9 @@ Provide a concise analysis (3-4 paragraphs)."""
                     table[(i, j)].set_facecolor('#ecf0f1')
         
         plt.title('Summary Statistics', fontsize=14, fontweight='bold', pad=20)
-        plt.tight_layout()
         file_path = output_dir / 'summary_statistics.png'
-        plt.savefig(file_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        generated_files['summary_statistics'] = file_path
-        logger.info(f"✓ Generated summary statistics table: {file_path}")
+        plt.tight_layout(); plt.savefig(file_path, dpi=300, bbox_inches="tight"); plt.close()
+        generated_files['summary_statistics'] = file_path; logger.info(f'✓ Generated: {file_path}')
         
         # 7. Export detailed CSV
         csv_path = output_dir / 'detailed_comparison.csv'
@@ -1369,7 +1318,6 @@ Provide a concise analysis (3-4 paragraphs)."""
         with open(html_path, 'w') as f:
             f.write(html_content)
         generated_files['index_html'] = html_path
-        logger.info(f"✓ Generated visualization index: {html_path}")
         
         logger.info(f"\n{'='*80}")
         logger.info(f"📊 Generated {len(generated_files)} visualizations in: {output_dir}")
@@ -1523,5 +1471,4 @@ Provide a concise analysis (3-4 paragraphs)."""
 </html>
 """
         return html
-
 
