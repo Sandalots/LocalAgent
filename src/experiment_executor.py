@@ -7,7 +7,6 @@ Outputs reproduced metrics (JSON) for Stage 4 (Result Evaluation).
 """
 
 import os
-import sys
 import platform
 import subprocess
 import logging

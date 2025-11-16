@@ -8,7 +8,6 @@ Coordinates all 4 stages: Paper Parsing → Code Retrieval → Experiment Execut
 import logging
 import sys
 import time
-import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 import yaml
@@ -21,7 +20,7 @@ import requests
 from paper_parser import PaperParser, PaperContent
 from repo_retriever import RepoRetriever
 from experiment_executor import ExperimentExecutor, CodebaseInfo, ExperimentConfig
-from result_evaluator import ResultEvaluator, BaselineMetrics
+from result_evaluator import ResultEvaluator
 
 
 # Custom colored logging formatter
