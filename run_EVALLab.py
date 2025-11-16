@@ -50,10 +50,10 @@ def main():
     
     # Check Ollama
     print("\n🔍 Checking Ollama...")
-    from llm_client import OllamaClient
-    client = OllamaClient()
+    # Create a temporary agent just to check Ollama
+    temp_agent = ReproductionAgent()
     
-    if not client.is_available():
+    if not temp_agent.is_available():
         print("❌ Ollama is not running!")
         print("\n   Please start Ollama in another terminal:")
         print("   $ ollama serve")
@@ -61,7 +61,7 @@ def main():
         print("   $ ollama pull llama3")
         return 1
     
-    models = client.list_models()
+    models = temp_agent.list_models()
     if not models:
         print("❌ No Ollama models found!")
         print("\n   Please pull a model:")

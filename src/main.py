@@ -3,20 +3,24 @@ Main Agent Orchestrator
 
 Coordinates the entire workflow: paper parsing → code analysis → 
 experiment execution → result evaluation.
+Includes integrated Ollama LLM client functionality.
 """
 
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, List, Any
 import yaml
 from dotenv import load_dotenv
 import os
+import json
+import re
+import requests
+from dataclasses import dataclass
 
 from paper_parser import PaperParser, PaperContent
-from llm_client import OllamaClient, LLMConfig
-from code_analyzer import CodeAnalyzer, CodebaseInfo
-from experiment_runner import ExperimentRunner, ExperimentConfig
+from repo_retriever import RepoRetriever
+from experiment_executor import ExperimentExecutor, CodebaseInfo, ExperimentConfig
 from result_evaluator import ResultEvaluator, BaselineMetrics
 
 
@@ -29,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class ReproductionAgent:
-    """Main agent that coordinates paper reproduction workflow."""
+    """Main agent that coordinates paper reproduction workflow with integrated LLM."""
     
     def __init__(self, config_path: Optional[Path] = None):
         """
@@ -44,26 +48,25 @@ class ReproductionAgent:
         # Load configuration
         self.config = self._load_config(config_path)
         
-        # Initialize components
-        llm_config = LLMConfig(
-            base_url=self.config['ollama']['base_url'],
-            model=self.config['ollama']['model'],
-            temperature=self.config['ollama']['temperature'],
-            timeout=self.config['ollama']['timeout']
-        )
+        # Initialize LLM settings (integrated from llm_client)
+        self.ollama_base_url = self.config['ollama']['base_url']
+        self.ollama_model = self.config['ollama']['model']
+        self.ollama_temperature = self.config['ollama']['temperature']
+        self.ollama_timeout = self.config['ollama']['timeout']
         
-        self.llm_client = OllamaClient(llm_config)
+        # Initialize components (using new 4-stage architecture)
         self.paper_parser = PaperParser()
-        self.code_analyzer = CodeAnalyzer(self.llm_client)
-        self.experiment_runner = ExperimentRunner(self.llm_client, config=self.config)
+        self.repo_retriever = RepoRetriever()
+        self.experiment_executor = ExperimentExecutor(config=self.config)
         self.result_evaluator = ResultEvaluator(
-            self.llm_client,
+            llm_client=self,  # Pass self as we have integrated LLM methods
             threshold=self.config['evaluation']['threshold']
         )
         
         # Create output directory
         self.output_dir = Path(self.config['paths']['output_dir'])
         self.output_dir.mkdir(exist_ok=True, parents=True)
+
     
     def _load_config(self, config_path: Optional[Path]) -> dict:
         """Load configuration from YAML file."""
@@ -95,6 +98,143 @@ class ReproductionAgent:
                 'cache_dir': './.cache'
             }
         }
+    
+    # ============================================================================
+    # INTEGRATED OLLAMA LLM CLIENT METHODS
+    # ============================================================================
+    
+    def is_available(self) -> bool:
+        """Check if Ollama is running and accessible."""
+        try:
+            response = requests.get(f"{self.ollama_base_url}/api/tags", timeout=5)
+            return response.status_code == 200
+        except requests.exceptions.RequestException:
+            return False
+    
+    def list_models(self) -> List[str]:
+        """List available models in Ollama."""
+        try:
+            response = requests.get(f"{self.ollama_base_url}/api/tags", timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return [model['name'] for model in data.get('models', [])]
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error listing models: {e}")
+            return []
+    
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, 
+                 temperature: Optional[float] = None) -> str:
+        """
+        Generate a response from the LLM.
+        
+        Args:
+            prompt: User prompt
+            system_prompt: Optional system prompt for context
+            temperature: Optional temperature override
+            
+        Returns:
+            Generated text response
+        """
+        url = f"{self.ollama_base_url}/api/generate"
+        
+        payload = {
+            "model": self.ollama_model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature or self.ollama_temperature
+            }
+        }
+        
+        if system_prompt:
+            payload["system"] = system_prompt
+        
+        try:
+            response = requests.post(
+                url, 
+                json=payload, 
+                timeout=self.ollama_timeout
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            return result.get('response', '').strip()
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error generating response: {e}")
+            raise
+    
+    def chat(self, messages: List[Dict[str, str]], 
+             temperature: Optional[float] = None) -> str:
+        """
+        Chat completion with conversation history.
+        
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            temperature: Optional temperature override
+            
+        Returns:
+            Generated response
+        """
+        url = f"{self.ollama_base_url}/api/chat"
+        
+        payload = {
+            "model": self.ollama_model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature or self.ollama_temperature
+            }
+        }
+        
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=self.ollama_timeout
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            return result.get('message', {}).get('content', '').strip()
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error in chat completion: {e}")
+            raise
+    
+    def extract_json(self, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generate a response and parse it as JSON.
+        
+        Args:
+            prompt: User prompt
+            system_prompt: Optional system prompt
+            
+        Returns:
+            Parsed JSON dictionary
+        """
+        response = self.generate(prompt, system_prompt, temperature=0.1)
+        
+        # Try to extract JSON from markdown code blocks first
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+        if json_match:
+            response = json_match.group(1)
+        
+        # Try to find JSON object in the response
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            response = json_match.group(0)
+        
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON: {e}")
+            logger.debug(f"Response was: {response[:500]}")
+            return {}
+    
+    # ============================================================================
+    # MAIN WORKFLOW METHODS
+    # ============================================================================
     
     def run(self, paper_path: Optional[Path] = None, codebase_source: Optional[str] = None) -> dict:
         """
@@ -129,15 +269,23 @@ class ReproductionAgent:
                 return {'error': 'No paper directory found'}
         
         # Step 1: Check Ollama availability
-        if not self.llm_client.is_available():
+        if not self.is_available():
             logger.error("Ollama is not running or not accessible!")
-            logger.error(f"Please start Ollama and ensure it's running at {self.llm_client.base_url}")
+            logger.error(f"Please start Ollama and ensure it's running at {self.ollama_base_url}")
             return {'error': 'Ollama not available'}
         
-        logger.info(f"✓ Connected to Ollama (model: {self.llm_client.model})")
+        logger.info(f"✓ Connected to Ollama (model: {self.ollama_model})")
         
-        # Step 2: Parse the paper
-        logger.info("\n[1/5] Parsing research paper...")
+        # Step 2: Parse the paper (Stage 1)
+        print("\n" + "="*80)
+        print("\033[94m┌" + "─"*78 + "┐\033[0m")
+        print("\033[94m│\033[0m" + "\033[1;96m STAGE 1/4: PAPER PARSING".center(78) + "\033[94m│\033[0m")
+        print("\033[94m├" + "─"*78 + "┤\033[0m")
+        print("\033[94m│\033[0m" + " 📄 Extracting text, figures, and GitHub URLs from PDF".ljust(78) + "\033[94m│\033[0m")
+        print("\033[94m│\033[0m" + " 🔍 Parsing paper structure and metadata".ljust(78) + "\033[94m│\033[0m")
+        print("\033[94m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
         paper_content = self.paper_parser.parse_pdf(paper_path)
         logger.info(f"✓ Extracted {len(paper_content.raw_text)} characters from paper")
         
@@ -147,7 +295,15 @@ class ReproductionAgent:
                 logger.info(f"  - {url}")
         
         # Step 3: Extract key sections using LLM
-        logger.info("\n[2/5] Extracting methodology and experiments with LLM...")
+        print("\n" + "="*80)
+        print("\033[93m┌" + "─"*78 + "┐\033[0m")
+        print("\033[93m│\033[0m" + "\033[1;93m STAGE 1.5/4: LLM SECTION EXTRACTION".center(78) + "\033[93m│\033[0m")
+        print("\033[93m├" + "─"*78 + "┤\033[0m")
+        print("\033[93m│\033[0m" + " 🤖 Using Ollama LLM to extract key sections".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" + " 📝 Identifying: Abstract, Methodology, Experiments, Results".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
         sections = self._extract_paper_sections(paper_content.raw_text)
         paper_content.abstract = sections.get('abstract', '')
         paper_content.methodology = sections.get('methodology', '')
@@ -158,22 +314,49 @@ class ReproductionAgent:
         logger.info(f"✓ Extracted methodology ({len(paper_content.methodology)} chars)")
         logger.info(f"✓ Extracted experiments ({len(paper_content.experiments)} chars)")
         
-        # Step 4: Get and analyze codebase
-        logger.info("\n[3/5] Analyzing codebase...")
-        codebase_path = self._get_codebase(paper_content, codebase_source)
+        # Step 4: Retrieve codebase (Stage 2 - NEW UNIFIED MODULE)
+        print("\n" + "="*80)
+        print("\033[92m┌" + "─"*78 + "┐\033[0m")
+        print("\033[92m│\033[0m" + "\033[1;92m STAGE 2/4: CODE RETRIEVAL".center(78) + "\033[92m│\033[0m")
+        print("\033[92m├" + "─"*78 + "┤\033[0m")
+        print("\033[92m│\033[0m" + " 🔎 Priority: User path → Local directory → GitHub URLs".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" + " 📦 Searching for experiment code and dependencies".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
+        # Convert codebase_source to Path if it's a string
+        local_path = Path(codebase_source) if codebase_source else None
+        
+        codebase_path = self.repo_retriever.retrieve_code(
+            github_urls=paper_content.github_urls,
+            local_path=local_path
+        )
         
         if not codebase_path:
             logger.error("No codebase available!")
             return {'error': 'No codebase available'}
         
-        codebase_info = self.code_analyzer.analyze_codebase(codebase_path)
+        logger.info(f"✓ Codebase retrieved at: {codebase_path}")
+        
+        # Step 5: Analyze codebase structure (Stage 3 - UNIFIED ANALYSIS & EXECUTION)
+        print("\n" + "="*80)
+        print("\033[95m┌" + "─"*78 + "┐\033[0m")
+        print("\033[95m│\033[0m" + "\033[1;95m STAGE 3/4: EXPERIMENT EXECUTION".center(78) + "\033[95m│\033[0m")
+        print("\033[95m├" + "─"*78 + "┤\033[0m")
+        print("\033[95m│\033[0m" + " 🔬 Analyzing codebase structure and dependencies".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" + " ⚙️  Setting up environment and validating data".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" + " 🚀 Running experiments with reproducible seeds".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
+        
+        codebase_info = self.experiment_executor.analyze_codebase(codebase_path)
         logger.info(f"✓ Analyzed codebase (language: {codebase_info.language})")
         logger.info(f"✓ Found {len(codebase_info.entry_points)} potential entry points")
         logger.info(f"✓ Found {len(codebase_info.dependencies)} dependencies")
         
         # Validate data integrity before running experiments
-        logger.info("\n[3.5/5] Validating data integrity...")
-        validation_results = self.experiment_runner.validate_data_integrity(codebase_info.path)
+        logger.info("\n[Stage 3.5/4] Validating data integrity...")
+        validation_results = self.experiment_executor.validate_data_integrity(codebase_info.path)
         
         if not validation_results['valid']:
             logger.warning("⚠️  Data validation failed - experiments may not reproduce correctly")
@@ -182,9 +365,9 @@ class ReproductionAgent:
             total_size = sum(s.get('size_mb', 0) for s in validation_results['file_stats'].values())
             logger.info(f"✓ Data validation complete - {len(validation_results['file_stats'])} files, {total_size:.1f}MB total")
         
-        # Step 5: Run experiments
-        logger.info("\n[4/5] Running experiments...")
-        experiment_results = self._run_experiments(paper_content, codebase_info)
+        # Run experiments
+        logger.info("\n[Stage 3.6/4] Running experiments...")
+        experiment_results = self._run_experiments_unified(paper_content, codebase_info)
         
         if not experiment_results:
             logger.error("No experiments were run successfully")
@@ -192,8 +375,16 @@ class ReproductionAgent:
         
         logger.info(f"✓ Completed {len(experiment_results)} experiments")
         
-        # Step 6: Evaluate results
-        logger.info("\n[5/5] Evaluating results...")
+        # Step 6: Evaluate results (Stage 4)
+        print("\n" + "="*80)
+        print("\033[96m┌" + "─"*78 + "┐\033[0m")
+        print("\033[96m│\033[0m" + "\033[1;96m STAGE 4/4: RESULT EVALUATION".center(78) + "\033[96m│\033[0m")
+        print("\033[96m├" + "─"*78 + "┤\033[0m")
+        print("\033[96m│\033[0m" + " 📊 Comparing reproduced metrics to baseline results".ljust(78) + "\033[96m│\033[0m")
+        print("\033[96m│\033[0m" + " 📈 Generating visualizations and performance reports".ljust(78) + "\033[96m│\033[0m")
+        print("\033[96m│\033[0m" + " ✅ Calculating success rate and deviation metrics".ljust(78) + "\033[96m│\033[0m")
+        print("\033[96m└" + "─"*78 + "┘\033[0m")
+        print("="*80 + "\n")
         
         # Load ALL experiment results from all output directories
         experiment_sets = self.result_evaluator.load_all_experiment_results(codebase_info.path)
@@ -307,7 +498,7 @@ Return ONLY a JSON object (no markdown, no explanation):
 {{"abstract": "text here", "methodology": "text here", "experiments": "text here", "results": "text here"}}"""
         
         try:
-            sections = self.llm_client.extract_json(user_prompt, system_prompt)
+            sections = self.extract_json(user_prompt, system_prompt)
             # Ensure all keys exist
             default_sections = {"abstract": "", "methodology": "", "experiments": "", "results": ""}
             default_sections.update(sections)
@@ -369,48 +560,13 @@ Return ONLY a JSON object (no markdown, no explanation):
         
         return metrics
     
-    def _get_codebase(self, paper_content: PaperContent, 
-                     codebase_source: Optional[str]) -> Optional[Path]:
-        """Get codebase either from GitHub or local path."""
-        if codebase_source:
-            # User provided explicit source
-            if codebase_source.startswith('http'):
-                logger.info(f"Cloning from provided URL: {codebase_source}")
-                return self.code_analyzer.clone_github_repo(codebase_source)
-            else:
-                logger.info(f"Using local codebase: {codebase_source}")
-                return Path(codebase_source)
-        
-        elif paper_content.github_urls:
-            # Use first GitHub URL from paper
-            github_url = paper_content.github_urls[0]
-            logger.info(f"Using GitHub URL from paper: {github_url}")
-            return self.code_analyzer.clone_github_repo(github_url)
-        
-        else:
-            # Check for local paper_source_code directory
-            workspace_root = Path(__file__).parent.parent
-            local_code_path = workspace_root / "paper_source_code" / "supplementary_material" / "code"
-            
-            if local_code_path.exists():
-                logger.info(f"✓ Found local codebase at: {local_code_path}")
-                return local_code_path
-            
-            # Fallback to just supplementary_material
-            local_code_path = workspace_root / "paper_source_code" / "supplementary_material"
-            if local_code_path.exists():
-                logger.info(f"✓ Found local codebase at: {local_code_path}")
-                return local_code_path
-            
-            logger.error("No codebase source provided and none found in paper or workspace")
-            return None
     
-    def _run_experiments(self, paper_content: PaperContent, 
+    def _run_experiments_unified(self, paper_content: PaperContent, 
                         codebase_info: CodebaseInfo) -> list:
-        """Run experiments based on paper context and codebase."""
+        """Run experiments using the unified experiment executor (Stage 3)."""
         # Set up environment
         logger.info("Setting up experiment environment...")
-        setup_success = self.experiment_runner.setup_environment(
+        setup_success = self.experiment_executor.setup_environment(
             codebase_info.path,
             codebase_info.dependencies
         )
@@ -422,7 +578,6 @@ Return ONLY a JSON object (no markdown, no explanation):
         priority_scripts = []
         if codebase_info.readme_content:
             # Look for python commands in README
-            import re
             python_cmds = re.findall(r'python[3]?\s+([\w_/\.]+\.py)(?:\s+(.*))?', 
                                     codebase_info.readme_content, re.IGNORECASE)
             for script_name, args in python_cmds:
@@ -445,7 +600,7 @@ Return ONLY a JSON object (no markdown, no explanation):
                 timeout=self.config['experiment']['timeout']
             )
             
-            result = self.experiment_runner.run_experiment(config)
+            result = self.experiment_executor.run_experiment(config)
             results.append(result)
             
             if result.success:
@@ -466,7 +621,7 @@ Return ONLY a JSON object (no markdown, no explanation):
                     timeout=self.config['experiment']['timeout']
                 )
                 
-                result = self.experiment_runner.run_experiment(config)
+                result = self.experiment_executor.run_experiment(config)
                 results.append(result)
                 
                 if result.success:
@@ -474,7 +629,7 @@ Return ONLY a JSON object (no markdown, no explanation):
                 else:
                     logger.warning(f"  ✗ Failed: {result.stderr[:200]}")
         
-        return results
+        return [r for r in results if r.success]
     
     def _save_results(self, paper_path: Path, comparisons: list, 
                      report: str, summary_stats: str, analysis: str,
