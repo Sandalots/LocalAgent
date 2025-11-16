@@ -1,10 +1,10 @@
-# Local Research Paper Reproduction Agent 🔬
+# EVALLab 🔬
 
-A local LLM-powered agent that reproduces research paper experiments using Ollama. Features a clean 4-stage architecture with 94.2% metric reproduction accuracy currently on the 'Decontextualization' Research Paper.
+A local LLM-powered agent that reproduces research paper experiments using Ollama3. Features a clean 4-stage architecture with 94.2% metric reproduction accuracy currently on the target 'Decontextualization' Research Paper.
 
 ## Architecture
 
-The agent uses a **4-stage pipeline**:
+The agent uses the following **4-stage pipeline**:
 
 1. **Stage 1: Paper Parser** - Extracts text, figures, and GitHub URLs from Research Paper PDFs
 2. **Stage 2: Repo Retriever** - Finds codebase (local → GitHub priority)
