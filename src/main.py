@@ -16,7 +16,6 @@ import os
 import json
 import re
 import requests
-from dataclasses import dataclass
 
 from paper_parser import PaperParser, PaperContent
 from repo_retriever import RepoRetriever
@@ -26,7 +25,7 @@ from result_evaluator import ResultEvaluator, BaselineMetrics
 
 # Custom colored logging formatter
 class ColoredFormatter(logging.Formatter):
-    """Custom formatter with colors for different log levels."""
+    """Custom formatter with colors for different log levels and highlights for special content."""
     
     # ANSI color codes
     COLORS = {
@@ -43,6 +42,66 @@ class ColoredFormatter(logging.Formatter):
     NAME_COLOR = '\033[94m'       # Blue
     LEVEL_COLORS = COLORS
     
+    # Highlight colors for special content
+    NUMBER_COLOR = '\033[96m'     # Cyan - for numbers
+    PATH_COLOR = '\033[93m'       # Yellow - for file paths
+    METRIC_COLOR = '\033[95m'     # Magenta - for percentages/metrics
+    ML_METRIC_COLOR = '\033[91m'  # Red - for ML metric names (F1, accuracy, etc.)
+    KEYWORD_COLOR = '\033[93m'    # Bright yellow - for special keywords
+    STATUS_COLOR = '\033[92m'     # Green - for status words (success, pass, etc.)
+    
+    def colorize_message(self, message, base_color):
+        """Add special highlighting to numbers, paths, and metrics in the message."""
+        import re
+        
+        # Highlight status words in green (success, pass, completed, etc.)
+        message = re.sub(
+            r'\b(success|pass|passed|completed?|excellent|good|failed?|error)\b',
+            f'{self.STATUS_COLOR}\\1{base_color}',
+            message,
+            flags=re.IGNORECASE
+        )
+        
+        # Highlight special keywords in bright yellow (ollama, baseline, reproduced, etc.)
+        message = re.sub(
+            r'\b(ollama|llama3|baseline|reproduced?|reproduction|grade|assessment|success\s+rate|avg\s+deviation|average\s+deviation|mean\s+deviation|avg\s+diff|deviation|difference|diff|metric|method|experiment|stage|pipeline|configuration|granularity|retrieval|downstream|model)\b',
+            f'{self.KEYWORD_COLOR}\\1{base_color}',
+            message,
+            flags=re.IGNORECASE
+        )
+        
+        # Highlight ML metric names in red (F1, accuracy, recall, precision, etc.)
+        message = re.sub(
+            r'\b(f1|accuracy|recall|precision|mrr|specificity|sensitivity|auc|roc|mse|mae|rmse|r2|loss|score)[-_\s]?(score|value|rate)?s?\b',
+            f'{self.ML_METRIC_COLOR}\\1\\2{base_color}',
+            message,
+            flags=re.IGNORECASE
+        )
+        
+        # Highlight percentages and metrics with units (e.g., 94.2%, 0.05, 10.5MB, 2.5s, etc.)
+        message = re.sub(
+            r'(\d+\.?\d*%|\d+\.\d+(?:MB|GB|KB|s|ms|mins?|hours?)?|\d+(?:MB|GB|KB|s|ms|mins?|hours?))',
+            f'{self.METRIC_COLOR}\\1{base_color}',
+            message
+        )
+        
+        # Highlight file paths (anything with / or .py, .txt, .json, etc.)
+        message = re.sub(
+            r'([/\w\-\.]+/[\w\-\./]+|[\w\-]+\.(py|txt|json|yaml|md|csv|html|pdf))',
+            f'{self.PATH_COLOR}\\1{base_color}',
+            message
+        )
+        
+        # Highlight standalone numbers (not already colored by previous rules)
+        # Avoid re-coloring numbers that are part of paths or metrics
+        message = re.sub(
+            r'(?<![/\w\-\.%])\b(\d+)\b(?![/\w\-\.%MGKB])',
+            f'{self.NUMBER_COLOR}\\1{base_color}',
+            message
+        )
+        
+        return message
+    
     def format(self, record):
         # Color the timestamp
         timestamp = self.formatTime(record, self.datefmt)
@@ -55,9 +114,12 @@ class ColoredFormatter(logging.Formatter):
         level_color = self.LEVEL_COLORS.get(record.levelname, self.RESET)
         colored_level = f"{level_color}{record.levelname}{self.RESET}"
         
-        # Color the message based on level
+        # Get base message color
         message_color = self.LEVEL_COLORS.get(record.levelname, self.RESET)
-        colored_message = f"{message_color}{record.getMessage()}{self.RESET}"
+        
+        # Colorize the message with special highlights
+        message = record.getMessage()
+        colored_message = f"{message_color}{self.colorize_message(message, message_color)}{self.RESET}"
         
         return f"{colored_time} - {colored_name} - {colored_level} - {colored_message}"
 
@@ -288,7 +350,7 @@ class ReproductionAgent:
             Dictionary with results and evaluation
         """
         logger.info("="*70)
-        logger.info("Starting Research Paper Reproduction Agent")
+        logger.info("Starting EVALLab...")
         logger.info("="*70)
         
         # Auto-detect paper if not provided
