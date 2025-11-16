@@ -8,6 +8,7 @@ Includes integrated Ollama LLM client functionality.
 
 import logging
 import sys
+import time
 import tempfile
 from pathlib import Path
 from typing import Optional, Dict, List, Any
@@ -125,12 +126,23 @@ class ColoredFormatter(logging.Formatter):
         return f"{colored_time} - {colored_name} - {colored_level} - {colored_message}"
 
 
-# Set up colored logging
-handler = logging.StreamHandler()
-handler.setFormatter(ColoredFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
+# Set up dual logging: colored console + plain file
+# Console handler with colors
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(ColoredFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
+
+# File handler without colors (plain text for log file)
+log_file_path = Path('./outputs/agent_execution.log')
+log_file_path.parent.mkdir(exist_ok=True, parents=True)
+file_handler = logging.FileHandler(log_file_path, mode='w', encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+))
+
 logging.basicConfig(
     level=logging.INFO,
-    handlers=[handler]
+    handlers=[console_handler, file_handler]
 )
 logger = logging.getLogger(__name__)
 
@@ -798,22 +810,68 @@ Return ONLY a JSON object (no markdown, no explanation):
     def _save_results(self, paper_path: Path, comparisons: list, 
                      report: str, summary_stats: str, analysis: str,
                      conclusions: str, experiment_sets: list):
-        """Save results to output directory."""
+        """Save comprehensive results with full execution log to output directory."""
         output_file = self.output_dir / f"{paper_path.stem}_results.txt"
+        log_file = Path('./outputs/agent_execution.log')
         
-        with open(output_file, 'w') as f:
-            f.write(f"Results for: {paper_path.name}\n")
-            f.write(f"Experiment sets analyzed: {len(experiment_sets)}\n")
-            f.write(f"Total comparisons: {len(comparisons)}\n")
-            f.write("\n" + report + "\n\n")
+        with open(output_file, 'w', encoding='utf-8') as f:
+            # Header
+            f.write("="*100 + "\n")
+            f.write("EVALLab: RESEARCH PAPER REPRODUCTION AGENT - COMPLETE EXECUTION LOG\n")
+            f.write("="*100 + "\n\n")
+            
+            f.write(f"Paper: {paper_path.name}\n")
+            f.write(f"Experiment Sets Analyzed: {len(experiment_sets)}\n")
+            f.write(f"Total Metric Comparisons: {len(comparisons)}\n")
+            f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("\n" + "="*100 + "\n\n")
+            
+            # Section 1: Full Execution Log
+            f.write("╔" + "═"*98 + "╗\n")
+            f.write("║" + " SECTION 1: COMPLETE EXECUTION LOG ".center(98) + "║\n")
+            f.write("╚" + "═"*98 + "╝\n\n")
+            
+            if log_file.exists():
+                with open(log_file, 'r', encoding='utf-8') as log:
+                    f.write(log.read())
+            else:
+                f.write("[Log file not found]\n")
+            
+            f.write("\n" + "="*100 + "\n\n")
+            
+            # Section 2: Detailed Results
+            f.write("╔" + "═"*98 + "╗\n")
+            f.write("║" + " SECTION 2: REPRODUCTION RESULTS EVALUATION ".center(98) + "║\n")
+            f.write("╚" + "═"*98 + "╝\n\n")
+            f.write(report + "\n\n")
+            
+            # Section 3: Summary Statistics
+            f.write("╔" + "═"*98 + "╗\n")
+            f.write("║" + " SECTION 3: SUMMARY STATISTICS ".center(98) + "║\n")
+            f.write("╚" + "═"*98 + "╝\n\n")
             f.write(summary_stats + "\n\n")
+            
+            # Section 4: LLM Analysis
             if analysis:
-                f.write("LLM ANALYSIS:\n")
+                f.write("╔" + "═"*98 + "╗\n")
+                f.write("║" + " SECTION 4: LLM ANALYSIS ".center(98) + "║\n")
+                f.write("╚" + "═"*98 + "╝\n\n")
                 f.write(analysis + "\n\n")
+            
+            # Section 5: Conclusions
             if conclusions:
-                f.write(conclusions + "\n")
+                f.write("╔" + "═"*98 + "╗\n")
+                f.write("║" + " SECTION 5: CONCLUSIONS & RECOMMENDATIONS ".center(98) + "║\n")
+                f.write("╚" + "═"*98 + "╝\n\n")
+                f.write(conclusions + "\n\n")
+            
+            # Footer
+            f.write("="*100 + "\n")
+            f.write("END OF REPORT\n")
+            f.write("="*100 + "\n")
         
         logger.info(f"✓ Results saved to: {output_file}")
+        logger.info(f"✓ Execution log saved to: {log_file}")
 
 
 def main():

@@ -4,10 +4,10 @@ A local LLM-powered agent that reproduces research paper experiments using Ollam
 ## Architecture
 The agent uses the following **4-stage pipeline**:
 
-1. **Stage 1: Paper Parser** - Extracts text, figures, and GitHub URLs from Research Paper PDFs
+1. **Stage 1: Paper Parser** - Extracts text, (Abstract, methodology, experiment, figures) from the input Research Paper
 2. **Stage 2: Repo Retriever** - Finds codebase (local → GitHub priority)
-3. **Stage 3: Experiment Executor** - Analyzes codebase + runs experiments
-4. **Stage 4: Result Evaluator** - Compares results + generates visualizations from baseline paper authors results
+3. **Stage 3: Experiment Executor** - Analyses Paper codebase + runs experiments from context of first 2 stages
+4. **Stage 4: Result Evaluator** - Compares results + generates visualizations from baseline paper authors results, returns plots, HTML Visualisation dashboard, csv and log data, as-well as full command line logging.
 
 ## Quick Start
 1. **Install and start Ollama with llama3:**
