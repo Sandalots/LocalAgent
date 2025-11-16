@@ -207,9 +207,7 @@ class ReproductionAgent:
             'experiment': {'timeout': 3600, 'max_retries': 2, 'use_venv': True},
             'evaluation': {'threshold': 0.05},
             'paths': {
-                'temp_dir': str(Path(tempfile.gettempdir()) / 'paper_reproduction'),
-                'output_dir': './outputs',
-                'cache_dir': './.cache'
+                'output_dir': './outputs'
             }
         }
     

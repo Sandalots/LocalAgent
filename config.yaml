@@ -25,6 +25,4 @@ evaluation:
     - loss
 
 paths:
-  temp_dir: "./temp"
   output_dir: "./outputs"
-  cache_dir: "./.cache"
