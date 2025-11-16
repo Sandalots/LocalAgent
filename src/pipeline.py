@@ -1,9 +1,8 @@
-"""
-Main Agent Orchestrator
+"""===============================================================================
+EVALLAB PIPELINE ORCHESTRATOR
 
-Coordinates the entire workflow: paper parsing → code analysis → 
-experiment execution → result evaluation.
-Includes integrated Ollama LLM client functionality.
+Coordinates all 4 stages: Paper Parsing → Code Retrieval → Experiment Execution → Result Evaluation.
+===============================================================================
 """
 
 import logging
