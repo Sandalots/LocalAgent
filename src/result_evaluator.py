@@ -1345,7 +1345,6 @@ Provide a concise analysis (3-4 paragraphs)."""
     <style>
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -1463,6 +1462,28 @@ Provide a concise analysis (3-4 paragraphs)."""
     <div class="visualization">
         <h3>📄 Detailed Data Export</h3>
         <p>Download the complete comparison data: 
+
+        <h2>📋 Metric Comparison Table</h2>
+        <table class="metrics-table">
+            <tr>
+                <th>Configuration</th>
+                <th>Metric</th>
+                <th>Baseline</th>
+                <th>Reproduced</th>
+                <th>Diff (%)</th>
+                <th>Status</th>
+            </tr>
+            {''.join([
+                f'<tr>'
+                f'<td>{row["configuration"]}</td>'
+                f'<td>{row["metric_name"]}</td>'
+                f'<td>{row["baseline_value"]:.4f}</td>'
+                f'<td>{row["reproduced_value"]:.4f}</td>'
+                f'<td>{row["percent_difference"]:.2f}</td>'
+                f'<td class="{"pass" if row["within_threshold"] else "fail"}">{"PASS" if row["within_threshold"] else "FAIL"}</td>'
+                f'</tr>' for _, row in df.iterrows()
+            ])}
+        </table>
            <a href="{files['detailed_csv'].name}">detailed_comparison.csv</a>
         </p>
     </div>

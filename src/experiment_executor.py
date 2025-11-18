@@ -174,19 +174,17 @@ class ExperimentExecutor:
 
         entry_points = []
 
-        # Search in root and immediate subdirectories
+        # Recursively search for entry points, excluding unwanted dirs
+        exclude_dirs = {'venv', 'env', 'site-packages', '__pycache__'}
         for pattern in entry_patterns:
-            # Root level
-            matches = list(path.glob(pattern))
-            # Filter out library files and venv
-            for match in matches:
-                if not any(part.startswith('.') or part in ['venv', 'env', 'site-packages', '__pycache__']
-                          for part in match.parts):
+            for match in path.rglob(pattern):
+                # Exclude files in unwanted directories
+                if not any(part.startswith('.') or part in exclude_dirs for part in match.parts):
                     if match.is_file() and match not in entry_points:
                         entry_points.append(match)
 
-        # Sort by likelihood (main > run > train > experiment > evaluate)
-        priority_order = ['main', 'run', 'train', 'experiment', 'evaluate']
+        # Sort by likelihood (evaluate > test > main > run > train > experiment)
+        priority_order = ['evaluate', 'test', 'main', 'run', 'train', 'experiment']
         def sort_key(p: Path):
             name = p.stem.lower()
             for i, prefix in enumerate(priority_order):
@@ -388,26 +386,24 @@ class ExperimentExecutor:
 
         start_time = time.time()
 
+        # Ensure script_path is absolute
+        script_path = config.script_path.resolve()
+
         # Prepare command with platform-specific Python
         python_cmd = _get_python_executable()
-        cmd = [python_cmd, str(config.script_path)] + config.args
+        cmd = [python_cmd, str(script_path)] + config.args
 
         # Prepare environment variables
         env = os.environ.copy()
         env.update(config.env_vars)
 
-        # Set random seeds for reproducibility
-        if 'random_seed' in self.config.get('experiments', {}):
-            seed = self.config['experiments']['random_seed']
-            if self.config['experiments'].get('set_environment_seeds', True):
-                env['PYTHONHASHSEED'] = str(seed)
-                env['RANDOM_SEED'] = str(seed)
-                logger.debug(f"Set PYTHONHASHSEED and RANDOM_SEED to {seed}")
+        # Set working directory to script's parent
+        working_dir = config.working_dir if config.working_dir else script_path.parent
 
         try:
             result = subprocess.run(
                 cmd,
-                cwd=str(config.working_dir),
+                cwd=str(working_dir),
                 env=env,
                 capture_output=True,
                 text=True,
@@ -417,7 +413,7 @@ class ExperimentExecutor:
             duration = time.time() - start_time
 
             # Try to parse any JSON output files
-            outputs = self._collect_outputs(config.working_dir)
+            outputs = self._collect_outputs(working_dir)
 
             return ExperimentResult(
                 success=(result.returncode == 0),

@@ -381,6 +381,9 @@ class ReproductionAgent:
 
         logger.info(f"✓ Connected to Ollama (model: {self.ollama_model})")
 
+        # Log which paper is being parsed
+        logger.info(f"Parsing paper: {paper_path}")
+
         # Step 2: Parse the paper (Stage 1)
         print("\n" + "="*80)
         print("\033[94m┌" + "─"*78 + "┐\033[0m")
