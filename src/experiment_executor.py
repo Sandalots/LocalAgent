@@ -169,7 +169,7 @@ class ExperimentExecutor:
         """Find potential entry point scripts (main, train, experiment, etc.)."""
         entry_patterns = [
             'main*.py', 'train*.py', 'run*.py', 'experiment*.py',
-            'evaluate*.py', '*_local_all*.py'  # For our specific paper
+            'evaluate*.py', 'test*.py'
         ]
 
         entry_points = []

@@ -175,7 +175,6 @@ class ReproductionAgent:
         self.output_dir = Path(self.config['paths']['output_dir'])
         self.output_dir.mkdir(exist_ok=True, parents=True)
 
-
     def _load_config(self, config_path: Optional[Path]) -> dict:
         """Load configuration from YAML file."""
         if config_path is None:
@@ -425,7 +424,7 @@ class ReproductionAgent:
         print("\033[92m┌" + "─"*78 + "┐\033[0m")
         print("\033[92m│\033[0m" + "\033[1;92m STAGE 2/4: CODE RETRIEVAL".center(78) + "\033[92m│\033[0m")
         print("\033[92m├" + "─"*78 + "┤\033[0m")
-        print("\033[92m│\033[0m" + " 🔎 Priority: User path → Local directory → GitHub URLs".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" + " 🔎 Priority: User path → GitHub (paper-specific) → Local dir (fallback)".ljust(78) + "\033[92m│\033[0m")
         print("\033[92m│\033[0m" + " 📦 Searching for experiment code and dependencies".ljust(78) + "\033[92m│\033[0m")
         print("\033[92m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
@@ -618,7 +617,6 @@ class ReproductionAgent:
             import traceback
             traceback.print_exc()
 
-
         # Save results
         self._save_results(paper_path, comparisons, report, summary_stats,
                           analysis, conclusions, experiment_sets)
@@ -724,7 +722,6 @@ Return ONLY a JSON object (no markdown, no explanation):
                 metrics[current_key] = float(value)
 
         return metrics
-
 
     def _run_experiments_unified(self, paper_content: PaperContent,
                         codebase_info: CodebaseInfo) -> list:

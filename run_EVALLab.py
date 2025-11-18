@@ -1,4 +1,5 @@
 import sys
+import argparse
 from pathlib import Path
 
 # Add src to path
@@ -6,9 +7,24 @@ sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from src.pipeline import ReproductionAgent
 
-
 def main():
-    """Run agent with auto-detection."""
+    """Run agent with command-line arguments or auto-detection."""
+    parser = argparse.ArgumentParser(
+        description='EVALLab: Research Paper Reproduction Agent',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+Examples:
+  python3 run_EVALLab.py                                    # Auto-detect or use Decontextualisation.pdf
+  python3 run_EVALLab.py paper/MyPaper.pdf                  # Specific paper
+  python3 run_EVALLab.py paper/MyPaper.pdf --code ./my_code # Specific paper + local code
+  python3 run_EVALLab.py --code https://github.com/user/repo # Auto-detect paper + GitHub code
+        '''
+    )
+    parser.add_argument('paper', nargs='?', type=str, help='Path to research paper PDF (default: paper/Decontextualisation.pdf or auto-detect)')
+    parser.add_argument('--code', type=str, help='Path to local codebase or GitHub URL (default: auto-detect from paper_source_code/ or paper)')
+    
+    args = parser.parse_args()
+    
     # Clear screen for fresh output (optional)
     print("\n" * 2)
     
@@ -21,8 +37,26 @@ def main():
     print("\033[1;96m" + "█" * 100 + "\033[0m")
     print("=" * 100)
     
+    # Show command-line usage if arguments provided
+    if args.paper or args.code:
+        print("\n\033[1;93m📋 Command-Line Mode:\033[0m")
+        if args.paper:
+            print(f"  Paper: {args.paper}")
+        if args.code:
+            print(f"  Code: {args.code}")
+        print()
+    
+    # Main EVALLab Header
+    print("=" * 100)
+    print("\033[1;96m" + "█" * 100 + "\033[0m")
+    print("\033[1;96m█" + " " * 98 + "█\033[0m")
+    print("\033[1;96m█" + "🔬 EVALLab: Research Paper Reproduction Agent".center(98) + "█\033[0m")
+    print("\033[1;96m█" + " " * 98 + "█\033[0m")
+    print("\033[1;96m" + "█" * 100 + "\033[0m")
+    print("=" * 100)
+    
     # What is EVALLab?
-    print("\n\033[1;93m┌" + "─" * 98 + "┐\033[0m")
+    print("\n\033[1;93m┌" + "─" * 98 + "┐\033[0mp")
     print("\033[1;93m│\033[0m" + "\033[1;97m WHAT IS EVALLAB?\033[0m".center(98) + "\033[1;93m│\033[0m")
     print("\033[1;93m├" + "─" * 98 + "┤\033[0m")
     print("\033[1;93m│\033[0m" + " An autonomous AI agent that reproduces computational experiments from research papers.".ljust(98) + "\033[1;93m│\033[0m")
@@ -75,10 +109,63 @@ def main():
     print("\033[1;92m▶ Starting Pre-Flight Checks...\033[0m")
     print("=" * 100 + "\n")
     
-    # Check workspace structure
+    # Resolve paper path
     workspace_root = Path(__file__).parent
     paper_dir = workspace_root / "paper"
     paper_source_dir = workspace_root / "paper_source_code"
+    
+    paper_path = None
+    if args.paper:
+        # User specified a paper
+        paper_path = Path(args.paper)
+        if not paper_path.exists():
+            print(f"❌ Paper not found: {args.paper}")
+            return 1
+        if not paper_path.suffix == '.pdf':
+            print(f"❌ Not a PDF file: {args.paper}")
+            return 1
+    else:
+        # Auto-detect: Priority 1 - Decontextualisation.pdf (British spelling)
+        default_paper = paper_dir / "Decontextualisation.pdf"
+        if not default_paper.exists():
+            # Also try American spelling
+            default_paper = paper_dir / "Decontextualization.pdf"
+        
+        if default_paper.exists():
+            paper_path = default_paper
+            print(f"✓ Using default paper: {default_paper.name}")
+        else:
+            # Priority 2 - Any PDF in paper/
+            if paper_dir.exists():
+                pdf_files = list(paper_dir.glob("*.pdf"))
+                if pdf_files:
+                    paper_path = pdf_files[0]
+                    print(f"✓ Auto-detected paper: {paper_path.name}")
+                else:
+                    print(f"❌ No PDF files found in ./paper/")
+                    print("   Please add your research paper PDF to ./paper/")
+                    return 1
+            else:
+                print(f"❌ ./paper/ directory not found!")
+                print("   Please create it and add your research paper PDF")
+                return 1
+    
+    print(f"\n📄 Paper: {paper_path.name}")
+    
+    # Resolve codebase source
+    codebase_source = None
+    if args.code:
+        codebase_source = args.code
+        if args.code.startswith('http'):
+            print(f"📦 Code source: {args.code} (GitHub)")
+        else:
+            code_path = Path(args.code)
+            if not code_path.exists():
+                print(f"❌ Code path not found: {args.code}")
+                return 1
+            print(f"📦 Code source: {args.code} (local)")
+    else:
+        print(f"📦 Code source: auto-detect (paper_source_code/ or GitHub URLs from paper)")
     
     print("\n📍 Checking workspace structure...")
     
@@ -86,14 +173,6 @@ def main():
         print(f"❌ ./paper/ directory not found!")
         print("   Please create it and add your research paper PDF")
         return 1
-    
-    pdf_files = list(paper_dir.glob("*.pdf"))
-    if not pdf_files:
-        print(f"❌ No PDF files found in ./paper/")
-        print("   Please add your research paper PDF to ./paper/")
-        return 1
-    
-    print(f"✓ Found paper: {pdf_files[0].name}")
     
     # Check for any code in paper_source_code directory
     if not paper_source_dir.exists():
@@ -144,7 +223,7 @@ def main():
     
     try:
         agent = ReproductionAgent()
-        results = agent.run()  # No arguments - auto-detect!
+        results = agent.run(paper_path=paper_path, codebase_source=codebase_source)
         
         if 'error' in results:
             print(f"\n❌ Error: {results['error']}")
@@ -178,7 +257,6 @@ def main():
         import traceback
         traceback.print_exc()
         return 1
-
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -65,11 +65,15 @@ class ResultEvaluator:
         """
         experiment_sets = []
         
-        output_dirs = [
-            "outputs_all_methods",
-            "outputs_all_methods_full", 
-            "outputs_all_methods_oracle"
-        ]
+        # Dynamically discover output directories with complete_results.json
+        output_dirs = []
+        for item in codebase_path.iterdir():
+            if item.is_dir() and (item / "complete_results.json").exists():
+                output_dirs.append(item.name)
+        
+        if not output_dirs:
+            logger.warning("No output directories with complete_results.json found")
+            return []
         
         for dir_name in output_dirs:
             output_dir = codebase_path / dir_name
@@ -264,11 +268,11 @@ JSON:"""
         """
         metrics = {}
         
-        output_dirs = [
-            "outputs_all_methods",
-            "outputs_all_methods_full",
-            "outputs_all_methods_oracle"
-        ]
+        # Dynamically discover output directories
+        output_dirs = []
+        for item in codebase_path.iterdir():
+            if item.is_dir() and (item / "complete_results.json").exists():
+                output_dirs.append(item.name)
         
         for dir_name in output_dirs:
             results_path = codebase_path / dir_name / "complete_results.json"
@@ -298,11 +302,11 @@ JSON:"""
         """
         metrics = {}
         
-        output_dirs = [
-            "outputs_all_methods",
-            "outputs_all_methods_full",
-            "outputs_all_methods_oracle"
-        ]
+        # Dynamically discover output directories with report.md
+        output_dirs = []
+        for item in codebase_path.iterdir():
+            if item.is_dir() and (item / "report.md").exists():
+                output_dirs.append(item.name)
         
         for dir_name in output_dirs:
             report_path = codebase_path / dir_name / "report.md"

@@ -1,7 +1,7 @@
 """===============================================================================
 EVALLAB STAGE 2/4: CODE RETRIEVAL
 
-Locates experiment codebase via: user path → local directory → GitHub clone.
+Locates experiment codebase via: user path → GitHub (paper-specific) → local directory (fallback).
 Outputs local codebase path for Stage 3 (Experiment Execution).
 ===============================================================================
 """
@@ -29,9 +29,9 @@ class RepoRetriever:
                      local_path: Path = None) -> Optional[Path]:
         """
         Retrieve code from available sources with the following priority:
-        1. User-provided local path
-        2. Local paper_source_code directory (if exists)
-        3. GitHub URLs from paper
+        1. User-provided local path (--code argument)
+        2. GitHub URLs from the paper (paper-specific)
+        3. Local paper_source_code directory (fallback/default)
 
         Args:
             github_urls: List of GitHub repository URLs found in paper
@@ -40,18 +40,12 @@ class RepoRetriever:
         Returns:
             Path to the retrieved codebase, or None if not found
         """
-        # Priority 1: User-provided local path
+        # Priority 1: User-provided local path (explicit override)
         if local_path and local_path.exists():
             logger.info(f"✓ Using user-provided codebase: {local_path}")
             return local_path
 
-        # Priority 2: Check paper_source_code directory
-        local_code = self._find_local_code()
-        if local_code:
-            logger.info(f"✓ Found local codebase: {local_code}")
-            return local_code
-
-        # Priority 3: Clone from GitHub
+        # Priority 2: Clone from GitHub (paper-specific code)
         if github_urls:
             logger.info(f"Found {len(github_urls)} GitHub URL(s) in paper")
             for url in github_urls:
@@ -59,12 +53,19 @@ class RepoRetriever:
 
             cloned_path = self._clone_github_repo(github_urls[0])
             if cloned_path:
+                logger.info(f"✓ Using paper-specific GitHub repository")
                 return cloned_path
+
+        # Priority 3: Check paper_source_code directory (fallback)
+        local_code = self._find_local_code()
+        if local_code:
+            logger.info(f"✓ Using local codebase (fallback): {local_code}")
+            return local_code
 
         logger.error("❌ No codebase found! Checked:")
         logger.error(f"  - User-provided path: {local_path}")
-        logger.error(f"  - Local directory: {self.paper_source_dir}")
         logger.error(f"  - GitHub URLs: {github_urls}")
+        logger.error(f"  - Local directory: {self.paper_source_dir}")
         return None
 
     def _find_local_code(self) -> Optional[Path]:
