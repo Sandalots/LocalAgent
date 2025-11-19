@@ -606,7 +606,8 @@ class ReproductionAgent:
         print("="*80 + "\n")
 
         try:
-            viz_dir = Path('outputs') / 'visualizations'
+            # Save visualizations in per-paper subdirectory
+            viz_dir = Path('outputs') / 'visualizations' / paper_path.stem
             paper_name = paper_path.stem  # Get filename without extension
             viz_files = self.result_evaluator.generate_visualizations(
                 comparisons,
@@ -615,6 +616,9 @@ class ReproductionAgent:
             )
             logger.info(f"✓ Generated {len(viz_files)} visualization files")
             logger.info(f"📊 View visualizations: {viz_dir / 'visualizations.html'}")
+
+            # Generate top-level dashboard listing all papers
+            self.result_evaluator.generate_visualizations_index(Path('outputs') / 'visualizations')
         except Exception as e:
             logger.error(f"Failed to generate visualizations: {e}")
             import traceback
