@@ -335,6 +335,7 @@ class ReproductionAgent:
         Returns:
             Parsed JSON dictionary
         """
+        import re
         response = self.generate(prompt, system_prompt, temperature=0.1)
 
         # Try to extract JSON from markdown code blocks first
@@ -349,10 +350,13 @@ class ReproductionAgent:
             response = json_match.group(0)
 
         try:
-            return json.loads(response)
+            # Clean control characters that break JSON
+            cleaned_response = re.sub(r'[\x00-\x1F\x7F]', '', response)
+            return json.loads(cleaned_response)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON: {e}")
-            logger.debug(f"Response was: {response[:500]}")
+            logger.error(f"Full raw LLM response:\n{response}")
+            logger.debug(f"Cleaned response:\n{cleaned_response}")
             return {}
 
     # ============================================================================
