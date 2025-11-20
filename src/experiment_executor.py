@@ -93,6 +93,12 @@ class ExperimentExecutor:
             config: Configuration dict from config.yaml
         """
         self.config = config or {}
+        self.logger = logger
+        if paper_name:
+            log_filename = f"agent_execution_{paper_name}.log"
+            file_handler = logging.FileHandler(log_filename)
+            file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+            self.logger.addHandler(file_handler)
 
     # ============================================================================
     # PART 1: CODEBASE ANALYSIS
@@ -393,6 +399,7 @@ class ExperimentExecutor:
             ExperimentResult with outputs and status
         """
         logger.info(f"Running experiment: {config.script_path}")
+            logger.info(f"Running experiment: {config.script_path}")
 
         start_time = time.time()
 
