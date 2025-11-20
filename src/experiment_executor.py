@@ -354,7 +354,7 @@ class ExperimentExecutor:
             python_executable, _, _ = _get_venv_paths(venv_path)
             logger.info(f"Installing {len(dependencies)} dependencies...")
             logger.info("⏳ This may take a few minutes depending on package sizes...")
-            logger.info(f"   (Timeout: 10 minutes)")
+            logger.info(f"   (Timeout: 30 minutes)")
 
             for dep in dependencies:
                 logger.info(f"→ Installing: {dep}")
@@ -364,14 +364,14 @@ class ExperimentExecutor:
                         check=True,
                         capture_output=True,
                         text=True,
-                        timeout=600  # 10 minute timeout
+                        timeout=1800  # 30 minute timeout
                     )
                     logger.info(f"✓ Installed: {dep}")
                 except subprocess.CalledProcessError as e:
                     logger.error(f"✗ Failed to install {dep}: {e.stderr}")
                     return False
                 except subprocess.TimeoutExpired:
-                    logger.error(f"✗ Timeout installing {dep} after 10 minutes")
+                    logger.error(f"✗ Timeout installing {dep} after 30 minutes")
                     return False
             logger.info("✓ All dependencies installed successfully")
             return True
