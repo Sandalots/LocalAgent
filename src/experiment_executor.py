@@ -512,13 +512,43 @@ class ExperimentExecutor:
         # Ensure script_path is absolute
         script_path = config.script_path.resolve()
 
-        # Use venv python if available
-        venv_path = config.working_dir / 'venv'
-        if venv_path.exists():
-            python_executable, _, _ = _get_venv_paths(venv_path)
-            python_cmd = str(python_executable)
+
+        # Robust venv detection: search for venv in working_dir and subdirs
+        def find_venv_path(base_dir: Path, max_depth: int = 2) -> Optional[Path]:
+            # Check base_dir/venv first
+            candidate = base_dir / 'venv'
+            if candidate.exists():
+                return candidate
+            # Search subdirectories up to max_depth
+            for root, dirs, files in os.walk(base_dir):
+                rel_depth = Path(root).relative_to(base_dir).parts
+                if len(rel_depth) > max_depth:
+                    continue
+                if 'venv' in dirs:
+                    venv_candidate = Path(root) / 'venv'
+                    if (venv_candidate / 'bin' / 'python').exists() or (venv_candidate / 'Scripts' / 'python.exe').exists():
+                        return venv_candidate
+            return None
+
+        venv_path = find_venv_path(config.working_dir)
+        if venv_path:
+            bin_dir = venv_path / ('Scripts' if platform.system() == 'Windows' else 'bin')
+            python3_path = bin_dir / 'python3'
+            python_path = bin_dir / 'python'
+            python_executable = None
+            if python3_path.exists() and os.access(python3_path, os.X_OK):
+                python_executable = python3_path.resolve()
+            elif python_path.exists() and os.access(python_path, os.X_OK):
+                python_executable = python_path.resolve()
+            if python_executable:
+                python_cmd = str(python_executable)
+                self.logger.info(f"[run_experiment] Using venv Python: {python_cmd}")
+            else:
+                self.logger.error(f"No executable python found in venv: {venv_path}. Aborting experiment.")
+                return ExperimentResult(success=False, stdout='', stderr='No executable python in venv', return_code=127, duration=0.0, outputs={})
         else:
             python_cmd = _get_python_executable()
+            self.logger.info(f"[run_experiment] No venv found, using workspace Python: {python_cmd}")
         cmd = [python_cmd, str(script_path)] + config.args
 
         # Prepare environment variables
@@ -529,7 +559,6 @@ class ExperimentExecutor:
         working_dir = config.working_dir if config.working_dir else script_path.parent
 
         try:
-
             import subprocess
             self.logger.info(f"[run_experiment] Running subprocess: {' '.join(cmd)}")
             proc = subprocess.Popen(
@@ -538,23 +567,35 @@ class ExperimentExecutor:
                 env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
+                bufsize=1
             )
             last_log_time = start_time
             poll_interval = 10  # seconds
             log_interval = 300  # 5 minutes
-            while True:
-                retcode = proc.poll()
+            stdout_lines = []
+            stderr_lines = []
+            import threading
+            def stream_output(pipe, lines, log_func):
+                for line in iter(pipe.readline, ''):
+                    lines.append(line)
+                    log_func(line.rstrip())
+                pipe.close()
+            stdout_thread = threading.Thread(target=stream_output, args=(proc.stdout, stdout_lines, self.logger.info))
+            stderr_thread = threading.Thread(target=stream_output, args=(proc.stderr, stderr_lines, self.logger.error))
+            stdout_thread.start()
+            stderr_thread.start()
+            while proc.poll() is None:
                 now = time.time()
-                if retcode is not None:
-                    break
                 if now - last_log_time >= log_interval:
                     elapsed = int((now - start_time) // 60)
                     self.logger.info(f"[run_experiment] Experiment still running after {elapsed} minutes...")
                     last_log_time = now
                 time.sleep(poll_interval)
-            # Collect output
-            stdout, stderr = proc.communicate()
+            stdout_thread.join()
+            stderr_thread.join()
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
             duration = time.time() - start_time
             end_time_str = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             self.logger.info(f"[run_experiment] End time: {end_time_str}")
