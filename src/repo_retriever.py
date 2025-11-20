@@ -14,8 +14,10 @@ from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
+
 class RepoRetriever:
     """Retrieve code repositories from various sources."""
+
     def __init__(self, workspace_root: Path = None):
         """
         Initialize repository retriever.
@@ -27,7 +29,7 @@ class RepoRetriever:
         self.paper_source_dir = self.workspace_root / "papers_source_code"
 
     def retrieve_code(self, github_urls: List[str] = None,
-                     local_path: Path = None) -> Optional[Path]:
+                      local_path: Path = None) -> Optional[Path]:
         """
         Retrieve code from available sources with the following priority:
         1. User-provided path/URL (--code argument) - local path OR GitHub URL
@@ -54,13 +56,16 @@ class RepoRetriever:
                     logger.info(f"✓ Using user-provided GitHub repository")
                     return cloned_path
                 # Clone failed - prompt user for manual clone
-                logger.error(f"❌ Failed to clone user-provided repository: {normalized_url}")
+                logger.error(
+                    f"❌ Failed to clone user-provided repository: {normalized_url}")
                 logger.error(f"")
                 logger.error(f"🛠️  MANUAL CLONE REQUIRED:")
                 logger.error(f"   Please run this command manually:")
-                logger.error(f"   git clone {normalized_url} {self.workspace_root}/cloned_repos/{normalized_url.split('/')[-1].replace('.git', '')}")
+                logger.error(
+                    f"   git clone {normalized_url} {self.workspace_root}/cloned_repos/{normalized_url.split('/')[-1].replace('.git', '')}")
                 logger.error(f"")
-                logger.error(f"   Then re-run EVALLab with: --code {self.workspace_root}/cloned_repos/{normalized_url.split('/')[-1].replace('.git', '')}")
+                logger.error(
+                    f"   Then re-run EVALLab with: --code {self.workspace_root}/cloned_repos/{normalized_url.split('/')[-1].replace('.git', '')}")
                 return None
             # Check if it's a local path
             elif local_path.exists():
@@ -68,12 +73,14 @@ class RepoRetriever:
                 if local_path.name == 'supplementary_material':
                     code_dir = local_path / 'code'
                     if code_dir.exists() and code_dir.is_dir():
-                        logger.info(f"✓ Using 'code' directory in supplementary_material: {code_dir}")
+                        logger.info(
+                            f"✓ Using 'code' directory in supplementary_material: {code_dir}")
                         return code_dir
                 logger.info(f"✓ Using user-provided codebase: {local_path}")
                 return local_path
             else:
-                logger.error(f"❌ User-provided path does not exist: {local_path}")
+                logger.error(
+                    f"❌ User-provided path does not exist: {local_path}")
                 return None
 
         # Priority 2: Clone from GitHub (paper-specific code)
@@ -103,7 +110,8 @@ class RepoRetriever:
         logger.error(f"  - User-provided path: {local_path}")
         logger.error(f"  - GitHub URLs: {github_urls}")
         logger.error(f"  - Local directory: {self.paper_source_dir}")
-        logger.error("🛑 Please specify a codebase using the --code argument or ensure the paper contains a valid GitHub repository link.")
+        logger.error(
+            "🛑 Please specify a codebase using the --code argument or ensure the paper contains a valid GitHub repository link.")
         return None
 
     def _find_local_code(self) -> Optional[Path]:
@@ -169,28 +177,28 @@ class RepoRetriever:
     def _normalize_github_url(self, url: str) -> str:
         """
         Normalize GitHub URL to proper format.
-        
+
         Args:
             url: GitHub URL (may be malformed)
-            
+
         Returns:
             Properly formatted GitHub URL
         """
         url = url.strip()
-        
+
         # Fix common issues
         # https:/github.com -> https://github.com
         if url.startswith('https:/github.com') and not url.startswith('https://github.com'):
             url = url.replace('https:/github.com', 'https://github.com')
-        
+
         # http:// -> https://
         if url.startswith('http://github.com'):
             url = url.replace('http://github.com', 'https://github.com')
-        
+
         # Ensure https:// prefix
         if url.startswith('github.com'):
             url = 'https://' + url
-        
+
         return url
 
     def _clone_github_repo(self, github_url: str) -> Optional[Path]:
@@ -215,11 +223,13 @@ class RepoRetriever:
             if clone_dir.exists():
                 if self._looks_like_code_dir(clone_dir):
                     logger.info(f"✓ Repository already exists: {clone_dir}")
-                    logger.info(f"   Skipping clone (delete directory to re-clone)")
+                    logger.info(
+                        f"   Skipping clone (delete directory to re-clone)")
                     return clone_dir
                 else:
                     # Directory exists but is empty/invalid - remove and re-clone
-                    logger.warning(f"Found invalid clone directory, removing: {clone_dir}")
+                    logger.warning(
+                        f"Found invalid clone directory, removing: {clone_dir}")
                     import shutil
                     shutil.rmtree(clone_dir)
                     logger.info(f"Re-cloning repository...")
@@ -242,7 +252,7 @@ class RepoRetriever:
                 error_msg = result.stderr.strip()
                 logger.error(f"Git clone failed with error:")
                 logger.error(f"  {error_msg}")
-                
+
                 # Provide helpful hints based on error type
                 if 'Repository not found' in error_msg or '404' in error_msg:
                     logger.error(f"")
@@ -258,7 +268,7 @@ class RepoRetriever:
                     logger.error(f"🔐 Authentication required. Try:")
                     logger.error(f"   1. Check if repository is public")
                     logger.error(f"   2. Configure SSH keys or use HTTPS")
-                
+
                 return None
 
         except subprocess.TimeoutExpired:

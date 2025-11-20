@@ -12,6 +12,7 @@ from typing import List, Optional
 import PyPDF2
 from dataclasses import dataclass
 
+
 @dataclass
 class PaperContent:
     """Structured representation of paper content."""
@@ -27,8 +28,10 @@ class PaperContent:
         if self.github_urls is None:
             self.github_urls = []
 
+
 class PaperParser:
     """Parse research papers and extract key sections."""
+
     def __init__(self):
         # Pattern matches URLs possibly split across lines
         self.github_pattern = re.compile(
@@ -60,7 +63,8 @@ class PaperParser:
                 content.raw_text = "\n".join(text_parts)
 
                 # Extract GitHub URLs
-                content.github_urls = self._extract_github_urls(content.raw_text)
+                content.github_urls = self._extract_github_urls(
+                    content.raw_text)
 
         except Exception as e:
             raise ValueError(f"Error parsing PDF: {e}")
@@ -76,4 +80,3 @@ class PaperParser:
         urls = [re.sub(r'\s+', '', url) for url in urls]
         # Remove duplicates while preserving order
         return list(dict.fromkeys(urls))
-

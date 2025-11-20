@@ -1,7 +1,9 @@
 # EVALLab
+
 A local LLM-powered agent that reproduces research paper experiments using Ollama3. Features a clean 4-stage architecture with 94.2% metric reproduction accuracy currently on the target 'Decontextualization' Research Paper.
 
 ## Architecture
+
 The agent uses the following **4-stage pipeline**:
 
 1. **Stage 1: Paper Parser** - Extracts text, (Abstract, methodology, experiment, figures) from the input Research Paper
@@ -10,13 +12,16 @@ The agent uses the following **4-stage pipeline**:
 4. **Stage 4: Result Evaluator** - Compares results + generates visualizations from baseline paper authors results, returns plots, HTML Visualisation dashboard, csv and log data, as-well as full command line logging.
 
 ## Quick Start
+
 1. **Install and start Ollama with llama3:**
+
    ```bash
    ollama serve
    ollama pull llama3
    ```
 
 2. **Set up Python environment:**
+
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
@@ -28,6 +33,7 @@ The agent uses the following **4-stage pipeline**:
    - Final structure: `papers_source_code/supplementary_material/`
 
 4. **Run the agent:**
+
    ```bash
    # Run with auto-detection (default paper and codebase)
    python3 run_EVALLab.py
@@ -43,4 +49,5 @@ The agent uses the following **4-stage pipeline**:
    ```
 
 ## Performance
+
 **~94.2% success rate** (339/360 metrics matched) with 1.05% mean deviation from baseline results currently when fed the 'Decontextualization' paper.

@@ -17,12 +17,14 @@ import json
 import re
 import requests
 
-from paper_parser import PaperParser, PaperContent
-from repo_retriever import RepoRetriever
-from experiment_executor import ExperimentExecutor, CodebaseInfo, ExperimentConfig
-from result_evaluator import ResultEvaluator
+from src.paper_parser import PaperParser, PaperContent
+from src.repo_retriever import RepoRetriever
+from src.experiment_executor import ExperimentExecutor, CodebaseInfo, ExperimentConfig
+from src.result_evaluator import ResultEvaluator
 
 # Custom colored logging formatter
+
+
 class ColoredFormatter(logging.Formatter):
     """Custom formatter with colors for different log levels and highlights for special content."""
     # ANSI color codes
@@ -44,9 +46,11 @@ class ColoredFormatter(logging.Formatter):
     NUMBER_COLOR = '\033[96m'     # Cyan - for numbers
     PATH_COLOR = '\033[93m'       # Yellow - for file paths
     METRIC_COLOR = '\033[95m'     # Magenta - for percentages/metrics
-    ML_METRIC_COLOR = '\033[91m'  # Red - for ML metric names (F1, accuracy, etc.)
+    # Red - for ML metric names (F1, accuracy, etc.)
+    ML_METRIC_COLOR = '\033[91m'
     KEYWORD_COLOR = '\033[93m'    # Bright yellow - for special keywords
-    STATUS_COLOR = '\033[92m'     # Green - for status words (success, pass, etc.)
+    # Green - for status words (success, pass, etc.)
+    STATUS_COLOR = '\033[92m'
 
     def colorize_message(self, message, base_color):
         """Add special highlighting to numbers, paths, and metrics in the message."""
@@ -121,6 +125,7 @@ class ColoredFormatter(logging.Formatter):
 
         return f"{colored_time} - {colored_name} - {colored_level} - {colored_message}"
 
+
 # Set up dual logging: colored console + plain file
 # Console handler with colors
 console_handler = logging.StreamHandler()
@@ -141,8 +146,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 class ReproductionAgent:
     """Main agent that coordinates paper reproduction workflow with integrated LLM."""
+
     def __init__(self, config_path: Optional[Path] = None):
         """
         Initialize the reproduction agent.
@@ -171,7 +178,8 @@ class ReproductionAgent:
             paper_name = Path(self.paper_path).stem
         elif 'paper' in self.config and self.config['paper']:
             paper_name = Path(self.config['paper']).stem
-        self.experiment_executor = ExperimentExecutor(config=self.config, paper_name=paper_name)
+        self.experiment_executor = ExperimentExecutor(
+            config=self.config, paper_name=paper_name)
         self.result_evaluator = ResultEvaluator(
             llm_client=self,  # Pass self as we have integrated LLM methods
             threshold=self.config['evaluation']['threshold']
@@ -187,7 +195,8 @@ class ReproductionAgent:
             config_path = Path(__file__).parent.parent / 'config.yaml'
 
         if not config_path.exists():
-            logger.warning(f"Config file not found: {config_path}, using defaults")
+            logger.warning(
+                f"Config file not found: {config_path}, using defaults")
             return self._default_config()
 
         with open(config_path, 'r') as f:
@@ -217,7 +226,8 @@ class ReproductionAgent:
     def is_available(self) -> bool:
         """Check if Ollama is running and accessible."""
         try:
-            response = requests.get(f"{self.ollama_base_url}/api/tags", timeout=5)
+            response = requests.get(
+                f"{self.ollama_base_url}/api/tags", timeout=5)
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
@@ -225,7 +235,8 @@ class ReproductionAgent:
     def list_models(self) -> List[str]:
         """List available models in Ollama."""
         try:
-            response = requests.get(f"{self.ollama_base_url}/api/tags", timeout=5)
+            response = requests.get(
+                f"{self.ollama_base_url}/api/tags", timeout=5)
             response.raise_for_status()
             data = response.json()
             return [model['name'] for model in data.get('models', [])]
@@ -327,7 +338,8 @@ class ReproductionAgent:
         response = self.generate(prompt, system_prompt, temperature=0.1)
 
         # Try to extract JSON from markdown code blocks first
-        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+        json_match = re.search(
+            r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
         if json_match:
             response = json_match.group(1)
 
@@ -382,7 +394,8 @@ class ReproductionAgent:
         # Step 1: Check Ollama availability
         if not self.is_available():
             logger.error("Ollama is not running or not accessible!")
-            logger.error(f"Please start Ollama and ensure it's running at {self.ollama_base_url}")
+            logger.error(
+                f"Please start Ollama and ensure it's running at {self.ollama_base_url}")
             return {'error': 'Ollama not available'}
 
         logger.info(f"✓ Connected to Ollama (model: {self.ollama_model})")
@@ -393,28 +406,36 @@ class ReproductionAgent:
         # Step 2: Parse the paper (Stage 1)
         print("\n" + "="*80)
         print("\033[94m┌" + "─"*78 + "┐\033[0m")
-        print("\033[94m│\033[0m" + "\033[1;96m STAGE 1/4: PAPER PARSING".center(78) + "\033[94m│\033[0m")
+        print("\033[94m│\033[0m" +
+              "\033[1;96m STAGE 1/4: PAPER PARSING".center(78) + "\033[94m│\033[0m")
         print("\033[94m├" + "─"*78 + "┤\033[0m")
-        print("\033[94m│\033[0m" + " 📄 Extracting text, figures, and GitHub URLs from PDF".ljust(78) + "\033[94m│\033[0m")
-        print("\033[94m│\033[0m" + " 🔍 Parsing paper structure and metadata".ljust(78) + "\033[94m│\033[0m")
+        print("\033[94m│\033[0m" +
+              " 📄 Extracting text, figures, and GitHub URLs from PDF".ljust(78) + "\033[94m│\033[0m")
+        print("\033[94m│\033[0m" +
+              " 🔍 Parsing paper structure and metadata".ljust(78) + "\033[94m│\033[0m")
         print("\033[94m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
         paper_content = self.paper_parser.parse_pdf(paper_path)
-        logger.info(f"✓ Extracted {len(paper_content.raw_text)} characters from paper")
+        logger.info(
+            f"✓ Extracted {len(paper_content.raw_text)} characters from paper")
 
         if paper_content.github_urls:
-            logger.info(f"✓ Found {len(paper_content.github_urls)} GitHub URLs in paper")
+            logger.info(
+                f"✓ Found {len(paper_content.github_urls)} GitHub URLs in paper")
             for url in paper_content.github_urls:
                 logger.info(f"  - {url}")
 
         # Step 3: Extract key sections using LLM
         print("\n" + "="*80)
         print("\033[93m┌" + "─"*78 + "┐\033[0m")
-        print("\033[93m│\033[0m" + "\033[1;93m STAGE 1.5/4: LLM SECTION EXTRACTION".center(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" +
+              "\033[1;93m STAGE 1.5/4: LLM SECTION EXTRACTION".center(78) + "\033[93m│\033[0m")
         print("\033[93m├" + "─"*78 + "┤\033[0m")
-        print("\033[93m│\033[0m" + " 🤖 Using Ollama LLM to extract key sections".ljust(78) + "\033[93m│\033[0m")
-        print("\033[93m│\033[0m" + " 📝 Identifying: Abstract, Methodology, Experiments, Results".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" +
+              " 🤖 Using Ollama LLM to extract key sections".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" +
+              " 📝 Identifying: Abstract, Methodology, Experiments, Results".ljust(78) + "\033[93m│\033[0m")
         print("\033[93m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
@@ -424,17 +445,23 @@ class ReproductionAgent:
         paper_content.experiments = sections.get('experiments', '')
         paper_content.results = sections.get('results', '')
 
-        logger.info(f"✓ Extracted abstract ({len(paper_content.abstract)} chars)")
-        logger.info(f"✓ Extracted methodology ({len(paper_content.methodology)} chars)")
-        logger.info(f"✓ Extracted experiments ({len(paper_content.experiments)} chars)")
+        logger.info(
+            f"✓ Extracted abstract ({len(paper_content.abstract)} chars)")
+        logger.info(
+            f"✓ Extracted methodology ({len(paper_content.methodology)} chars)")
+        logger.info(
+            f"✓ Extracted experiments ({len(paper_content.experiments)} chars)")
 
         # Step 4: Retrieve codebase (Stage 2 - NEW UNIFIED MODULE)
         print("\n" + "="*80)
         print("\033[92m┌" + "─"*78 + "┐\033[0m")
-        print("\033[92m│\033[0m" + "\033[1;92m STAGE 2/4: CODE RETRIEVAL".center(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              "\033[1;92m STAGE 2/4: CODE RETRIEVAL".center(78) + "\033[92m│\033[0m")
         print("\033[92m├" + "─"*78 + "┤\033[0m")
-        print("\033[92m│\033[0m" + " 🔎 Priority: User path → GitHub (paper-specific) → Local dir (fallback)".ljust(78) + "\033[92m│\033[0m")
-        print("\033[92m│\033[0m" + " 📦 Searching for experiment code and dependencies".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " 🔎 Priority: User path → GitHub (paper-specific) → Local dir (fallback)".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " 📦 Searching for experiment code and dependencies".ljust(78) + "\033[92m│\033[0m")
         print("\033[92m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
@@ -449,25 +476,37 @@ class ReproductionAgent:
         if not codebase_path:
             print("\n" + "="*80)
             print("\033[91m┌" + "─"*78 + "┐\033[0m")
-            print("\033[91m│\033[0m" + "\033[1;91m ❌ NO CODEBASE FOUND".center(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  "\033[1;91m ❌ NO CODEBASE FOUND".center(78) + "\033[91m│\033[0m")
             print("\033[91m├" + "─"*78 + "┤\033[0m")
-            print("\033[91m│\033[0m" + " Unable to find experiment code from any source.".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  " Unable to find experiment code from any source.".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + " 💡 SOLUTION: Manually add codebase to ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  " 💡 SOLUTION: Manually add codebase to ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   Steps:".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   1. Create ./papers_source_code/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   2. Place your experiment codebase inside it".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   3. Run the agent again".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  "   Steps:".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  "   1. Create ./papers_source_code/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  "   2. Place your experiment codebase inside it".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  "   3. Run the agent again".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + " Checked:".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  " Checked:".ljust(78) + "\033[91m│\033[0m")
             if local_path:
-                print("\033[91m│\033[0m" + f"   ✗ User path: {local_path}".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   ✗ Local directory: ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
+                print(
+                    "\033[91m│\033[0m" + f"   ✗ User path: {local_path}".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" +
+                  "   ✗ Local directory: ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
             if paper_content.github_urls:
-                print("\033[91m│\033[0m" + f"   ✗ GitHub URLs: {len(paper_content.github_urls)} found but failed to clone".ljust(78) + "\033[91m│\033[0m")
+                print("\033[91m│\033[0m" + f"   ✗ GitHub URLs: {len(paper_content.github_urls)} found but failed to clone".ljust(
+                    78) + "\033[91m│\033[0m")
             else:
-                print("\033[91m│\033[0m" + "   ✗ GitHub URLs: None found in paper".ljust(78) + "\033[91m│\033[0m")
+                print(
+                    "\033[91m│\033[0m" + "   ✗ GitHub URLs: None found in paper".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m└" + "─"*78 + "┘\033[0m")
             print("="*80 + "\n")
             logger.error("No codebase available!")
@@ -478,33 +517,45 @@ class ReproductionAgent:
         # Step 5: Analyze codebase structure (Stage 3 - UNIFIED ANALYSIS & EXECUTION)
         print("\n" + "="*80)
         print("\033[95m┌" + "─"*78 + "┐\033[0m")
-        print("\033[95m│\033[0m" + "\033[1;95m STAGE 3/4: EXPERIMENT EXECUTION".center(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              "\033[1;95m STAGE 3/4: EXPERIMENT EXECUTION".center(78) + "\033[95m│\033[0m")
         print("\033[95m├" + "─"*78 + "┤\033[0m")
-        print("\033[95m│\033[0m" + " 🔬 Analyzing codebase structure and dependencies".ljust(78) + "\033[95m│\033[0m")
-        print("\033[95m│\033[0m" + " ⚙️  Setting up environment and validating data".ljust(78) + "\033[95m│\033[0m")
-        print("\033[95m│\033[0m" + " 🚀 Running experiments with reproducible seeds".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              " 🔬 Analyzing codebase structure and dependencies".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              " ⚙️  Setting up environment and validating data".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              " 🚀 Running experiments with reproducible seeds".ljust(78) + "\033[95m│\033[0m")
         print("\033[95m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
-        codebase_info = self.experiment_executor.analyze_codebase(codebase_path)
-        logger.info(f"✓ Analyzed codebase (language: {codebase_info.language})")
-        logger.info(f"✓ Found {len(codebase_info.entry_points)} potential entry points")
+        codebase_info = self.experiment_executor.analyze_codebase(
+            codebase_path)
+        logger.info(
+            f"✓ Analyzed codebase (language: {codebase_info.language})")
+        logger.info(
+            f"✓ Found {len(codebase_info.entry_points)} potential entry points")
         logger.info(f"✓ Found {len(codebase_info.dependencies)} dependencies")
 
         # Validate data integrity before running experiments
         logger.info("\n[Stage 3.5/4] Validating data integrity...")
-        validation_results = self.experiment_executor.validate_data_integrity(codebase_info.path)
+        validation_results = self.experiment_executor.validate_data_integrity(
+            codebase_info.path)
 
         if not validation_results['valid']:
-            logger.warning("⚠️  Data validation failed - experiments may not reproduce correctly")
+            logger.warning(
+                "⚠️  Data validation failed - experiments may not reproduce correctly")
 
         if validation_results['file_stats']:
-            total_size = sum(s.get('size_mb', 0) for s in validation_results['file_stats'].values())
-            logger.info(f"✓ Data validation complete - {len(validation_results['file_stats'])} files, {total_size:.1f}MB total")
+            total_size = sum(s.get('size_mb', 0)
+                             for s in validation_results['file_stats'].values())
+            logger.info(
+                f"✓ Data validation complete - {len(validation_results['file_stats'])} files, {total_size:.1f}MB total")
 
         # Run experiments
         logger.info("\n[Stage 3.6/4] Running experiments...")
-        experiment_results = self._run_experiments_unified(paper_content, codebase_info)
+        experiment_results = self._run_experiments_unified(
+            paper_content, codebase_info)
 
         if not experiment_results:
             logger.error("No experiments were run successfully")
@@ -515,16 +566,21 @@ class ReproductionAgent:
         # Step 6: Evaluate results (Stage 4)
         print("\n" + "="*80)
         print("\033[96m┌" + "─"*78 + "┐\033[0m")
-        print("\033[96m│\033[0m" + "\033[1;96m STAGE 4/4: RESULT EVALUATION".center(78) + "\033[96m│\033[0m")
+        print("\033[96m│\033[0m" +
+              "\033[1;96m STAGE 4/4: RESULT EVALUATION".center(78) + "\033[96m│\033[0m")
         print("\033[96m├" + "─"*78 + "┤\033[0m")
-        print("\033[96m│\033[0m" + " 📊 Comparing reproduced metrics to baseline results".ljust(78) + "\033[96m│\033[0m")
-        print("\033[96m│\033[0m" + " 📈 Generating visualizations and performance reports".ljust(78) + "\033[96m│\033[0m")
-        print("\033[96m│\033[0m" + " ✅ Calculating success rate and deviation metrics".ljust(78) + "\033[96m│\033[0m")
+        print("\033[96m│\033[0m" +
+              " 📊 Comparing reproduced metrics to baseline results".ljust(78) + "\033[96m│\033[0m")
+        print("\033[96m│\033[0m" +
+              " 📈 Generating visualizations and performance reports".ljust(78) + "\033[96m│\033[0m")
+        print("\033[96m│\033[0m" +
+              " ✅ Calculating success rate and deviation metrics".ljust(78) + "\033[96m│\033[0m")
         print("\033[96m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
         # Load ALL experiment results from all output directories
-        experiment_sets = self.result_evaluator.load_all_experiment_results(codebase_info.path)
+        experiment_sets = self.result_evaluator.load_all_experiment_results(
+            codebase_info.path)
 
         if not experiment_sets:
             logger.error("No experiment result sets found")
@@ -533,8 +589,10 @@ class ReproductionAgent:
         logger.info(f"✓ Loaded {len(experiment_sets)} experiment sets")
 
         # Extract all metrics from all experiments
-        all_reproduced_metrics = self.result_evaluator.extract_all_metrics_from_experiments(experiment_sets)
-        logger.info(f"✓ Extracted {len(all_reproduced_metrics)} total metrics from all experiments")
+        all_reproduced_metrics = self.result_evaluator.extract_all_metrics_from_experiments(
+            experiment_sets)
+        logger.info(
+            f"✓ Extracted {len(all_reproduced_metrics)} total metrics from all experiments")
 
         # Try to extract baseline from paper AND report.md files
         baseline = self.result_evaluator.extract_baseline_from_paper(
@@ -545,7 +603,8 @@ class ReproductionAgent:
         logger.info(f"  Source: {baseline.source}")
 
         # Compare all reproduced metrics to baseline
-        comparisons = self.result_evaluator.compare_results(baseline, all_reproduced_metrics)
+        comparisons = self.result_evaluator.compare_results(
+            baseline, all_reproduced_metrics)
         logger.info(f"✓ Generated {len(comparisons)} metric comparisons")
 
         # Generate comprehensive report
@@ -555,14 +614,18 @@ class ReproductionAgent:
         # Generate summary statistics
         print("\n" + "="*80)
         print("\033[93m┌" + "─"*78 + "┐\033[0m")
-        print("\033[93m│\033[0m" + "\033[1;93m 📊 SUMMARY STATISTICS".center(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" +
+              "\033[1;93m 📊 SUMMARY STATISTICS".center(78) + "\033[93m│\033[0m")
         print("\033[93m├" + "─"*78 + "┤\033[0m")
-        print("\033[93m│\033[0m" + " 📈 Performance metrics and success rates".ljust(78) + "\033[93m│\033[0m")
-        print("\033[93m│\033[0m" + " 🎯 Deviation analysis and accuracy scores".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" +
+              " 📈 Performance metrics and success rates".ljust(78) + "\033[93m│\033[0m")
+        print("\033[93m│\033[0m" +
+              " 🎯 Deviation analysis and accuracy scores".ljust(78) + "\033[93m│\033[0m")
         print("\033[93m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
-        summary_stats = self.result_evaluator.generate_summary_statistics(comparisons)
+        summary_stats = self.result_evaluator.generate_summary_statistics(
+            comparisons)
         logger.info(summary_stats)
 
         # Get LLM analysis of differences
@@ -570,10 +633,13 @@ class ReproductionAgent:
         if comparisons:
             print("\n" + "="*80)
             print("\033[94m┌" + "─"*78 + "┐\033[0m")
-            print("\033[94m│\033[0m" + "\033[1;94m 🤖 LLM ANALYSIS".center(78) + "\033[94m│\033[0m")
+            print("\033[94m│\033[0m" +
+                  "\033[1;94m 🤖 LLM ANALYSIS".center(78) + "\033[94m│\033[0m")
             print("\033[94m├" + "─"*78 + "┤\033[0m")
-            print("\033[94m│\033[0m" + " 🧠 AI-powered analysis of result differences".ljust(78) + "\033[94m│\033[0m")
-            print("\033[94m│\033[0m" + " 💡 Insights into methodology and experiment variations".ljust(78) + "\033[94m│\033[0m")
+            print("\033[94m│\033[0m" +
+                  " 🧠 AI-powered analysis of result differences".ljust(78) + "\033[94m│\033[0m")
+            print("\033[94m│\033[0m" +
+                  " 💡 Insights into methodology and experiment variations".ljust(78) + "\033[94m│\033[0m")
             print("\033[94m└" + "─"*78 + "┘\033[0m")
             print("="*80 + "\n")
 
@@ -586,10 +652,13 @@ class ReproductionAgent:
         # Generate comprehensive conclusions and recommendations
         print("\n" + "="*80)
         print("\033[92m┌" + "─"*78 + "┐\033[0m")
-        print("\033[92m│\033[0m" + "\033[1;92m 📋 CONCLUSIONS & RECOMMENDATIONS".center(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              "\033[1;92m 📋 CONCLUSIONS & RECOMMENDATIONS".center(78) + "\033[92m│\033[0m")
         print("\033[92m├" + "─"*78 + "┤\033[0m")
-        print("\033[92m│\033[0m" + " ✅ Comprehensive analysis of reproduction success".ljust(78) + "\033[92m│\033[0m")
-        print("\033[92m│\033[0m" + " 🔍 Key findings and improvement recommendations".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " ✅ Comprehensive analysis of reproduction success".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " 🔍 Key findings and improvement recommendations".ljust(78) + "\033[92m│\033[0m")
         print("\033[92m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
@@ -604,10 +673,13 @@ class ReproductionAgent:
         # Generate visualizations
         print("\n" + "="*80)
         print("\033[95m┌" + "─"*78 + "┐\033[0m")
-        print("\033[95m│\033[0m" + "\033[1;95m 📊 VISUALIZATION GENERATION".center(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              "\033[1;95m 📊 VISUALIZATION GENERATION".center(78) + "\033[95m│\033[0m")
         print("\033[95m├" + "─"*78 + "┤\033[0m")
-        print("\033[95m│\033[0m" + " 📈 Creating charts: bar, scatter, heatmap, histogram".ljust(78) + "\033[95m│\033[0m")
-        print("\033[95m│\033[0m" + " 🎨 Generating HTML dashboard and CSV exports".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              " 📈 Creating charts: bar, scatter, heatmap, histogram".ljust(78) + "\033[95m│\033[0m")
+        print("\033[95m│\033[0m" +
+              " 🎨 Generating HTML dashboard and CSV exports".ljust(78) + "\033[95m│\033[0m")
         print("\033[95m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
@@ -621,10 +693,12 @@ class ReproductionAgent:
                 paper_name=paper_name
             )
             logger.info(f"✓ Generated {len(viz_files)} visualization files")
-            logger.info(f"📊 View visualizations: {viz_dir / 'visualizations.html'}")
+            logger.info(
+                f"📊 View visualizations: {viz_dir / 'visualizations.html'}")
 
             # Generate top-level dashboard listing all papers
-            self.result_evaluator.generate_visualizations_index(Path('outputs') / 'visualizations')
+            self.result_evaluator.generate_visualizations_index(
+                Path('outputs') / 'visualizations')
         except Exception as e:
             logger.error(f"Failed to generate visualizations: {e}")
             import traceback
@@ -632,15 +706,19 @@ class ReproductionAgent:
 
         # Save results
         self._save_results(paper_path, comparisons, report, summary_stats,
-                          analysis, conclusions, experiment_sets)
+                           analysis, conclusions, experiment_sets)
 
         print("\n" + "="*80)
         print("\033[92m┌" + "─"*78 + "┐\033[0m")
-        print("\033[92m│\033[0m" + "\033[1;92m ✅ WORKFLOW COMPLETED SUCCESSFULLY!".center(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              "\033[1;92m ✅ WORKFLOW COMPLETED SUCCESSFULLY!".center(78) + "\033[92m│\033[0m")
         print("\033[92m├" + "─"*78 + "┤\033[0m")
-        print("\033[92m│\033[0m" + " 🎉 All 4 stages completed".ljust(78) + "\033[92m│\033[0m")
-        print("\033[92m│\033[0m" + " 📁 Results saved to outputs/ directory".ljust(78) + "\033[92m│\033[0m")
-        print("\033[92m│\033[0m" + " 📊 Visualizations available in outputs/visualizations/".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " 🎉 All 4 stages completed".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " 📁 Results saved to outputs/ directory".ljust(78) + "\033[92m│\033[0m")
+        print("\033[92m│\033[0m" +
+              " 📊 Visualizations available in outputs/visualizations/".ljust(78) + "\033[92m│\033[0m")
         print("\033[92m└" + "─"*78 + "┘\033[0m")
         print("="*80 + "\n")
 
@@ -676,7 +754,8 @@ Return ONLY a JSON object (no markdown, no explanation):
         try:
             sections = self.extract_json(user_prompt, system_prompt)
             # Ensure all keys exist
-            default_sections = {"abstract": "", "methodology": "", "experiments": "", "results": ""}
+            default_sections = {
+                "abstract": "", "methodology": "", "experiments": "", "results": ""}
             default_sections.update(sections)
             return default_sections
         except Exception as e:
@@ -688,10 +767,12 @@ Return ONLY a JSON object (no markdown, no explanation):
     def _simple_section_extraction(self, text: str) -> dict:
         """Simple regex-based section extraction as fallback."""
         import re
-        sections = {"abstract": "", "methodology": "", "experiments": "", "results": ""}
+        sections = {"abstract": "", "methodology": "",
+                    "experiments": "", "results": ""}
 
         # Try to find abstract
-        abstract_match = re.search(r'(?:Abstract|ABSTRACT)[:\s]+(.*?)(?=\n\n|\n[A-Z])', text, re.DOTALL)
+        abstract_match = re.search(
+            r'(?:Abstract|ABSTRACT)[:\s]+(.*?)(?=\n\n|\n[A-Z])', text, re.DOTALL)
         if abstract_match:
             sections['abstract'] = abstract_match.group(1).strip()[:1000]
 
@@ -723,12 +804,14 @@ Return ONLY a JSON object (no markdown, no explanation):
                             # Handle metrics with multiple thresholds (e.g., recall@1, recall@5)
                             for threshold, val in metric_value.items():
                                 if isinstance(val, (int, float)):
-                                    metrics[f"{metric_name}@{threshold}"] = float(val)
+                                    metrics[f"{metric_name}@{threshold}"] = float(
+                                        val)
                         elif isinstance(metric_value, (int, float)):
                             metrics[metric_name] = float(metric_value)
                 else:
                     # Recurse into nested dicts
-                    nested = self._extract_metrics_from_nested_dict(value, current_key)
+                    nested = self._extract_metrics_from_nested_dict(
+                        value, current_key)
                     metrics.update(nested)
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
                 # Direct numeric value
@@ -737,7 +820,7 @@ Return ONLY a JSON object (no markdown, no explanation):
         return metrics
 
     def _run_experiments_unified(self, paper_content: PaperContent,
-                        codebase_info: CodebaseInfo) -> list:
+                                 codebase_info: CodebaseInfo) -> list:
         """Run experiments using the unified experiment executor (Stage 3)."""
         # Set up environment
         logger.info("Setting up experiment environment...")
@@ -747,25 +830,29 @@ Return ONLY a JSON object (no markdown, no explanation):
         )
 
         if not setup_success:
-            logger.warning("Environment setup had issues, proceeding anyway...")
+            logger.warning(
+                "Environment setup had issues, proceeding anyway...")
 
         # Check for README instructions
         priority_scripts = []
         if codebase_info.readme_content:
             # Look for python commands in README
             python_cmds = re.findall(r'python[3]?\s+([\w_/\.]+\.py)(?:\s+(.*))?',
-                                    codebase_info.readme_content, re.IGNORECASE)
+                                     codebase_info.readme_content, re.IGNORECASE)
             for script_name, args in python_cmds:
                 script_path = codebase_info.path / script_name
                 if script_path.exists():
-                    logger.info(f"Found priority script from README: {script_name}")
-                    priority_scripts.append((script_path, args.strip().split() if args else []))
+                    logger.info(
+                        f"Found priority script from README: {script_name}")
+                    priority_scripts.append(
+                        (script_path, args.strip().split() if args else []))
 
         results = []
 
         # Run priority scripts from README first
         for script_path, args in priority_scripts[:2]:  # Limit to 2
-            logger.info(f"Running priority script: {script_path.name} {' '.join(args)}")
+            logger.info(
+                f"Running priority script: {script_path.name} {' '.join(args)}")
 
             config = ExperimentConfig(
                 script_path=script_path,
@@ -800,15 +887,16 @@ Return ONLY a JSON object (no markdown, no explanation):
                 results.append(result)
 
                 if result.success:
-                    logger.info(f"  ✓ Success (duration: {result.duration:.2f}s)")
+                    logger.info(
+                        f"  ✓ Success (duration: {result.duration:.2f}s)")
                 else:
                     logger.warning(f"  ✗ Failed: {result.stderr[:200]}")
 
         return [r for r in results if r.success]
 
     def _save_results(self, paper_path: Path, comparisons: list,
-                     report: str, summary_stats: str, analysis: str,
-                     conclusions: str, experiment_sets: list):
+                      report: str, summary_stats: str, analysis: str,
+                      conclusions: str, experiment_sets: list):
         """Save comprehensive results with full execution log to output directory."""
         output_file = self.output_dir / f"{paper_path.stem}_results.txt"
         log_file = Path('./outputs/agent_execution.log')
@@ -816,7 +904,8 @@ Return ONLY a JSON object (no markdown, no explanation):
         with open(output_file, 'w', encoding='utf-8') as f:
             # Header
             f.write("="*100 + "\n")
-            f.write("EVALLab: RESEARCH PAPER REPRODUCTION AGENT - COMPLETE EXECUTION LOG\n")
+            f.write(
+                "EVALLab: RESEARCH PAPER REPRODUCTION AGENT - COMPLETE EXECUTION LOG\n")
             f.write("="*100 + "\n\n")
 
             f.write(f"Paper: {paper_path.name}\n")
@@ -840,7 +929,8 @@ Return ONLY a JSON object (no markdown, no explanation):
 
             # Section 2: Detailed Results
             f.write("╔" + "═"*98 + "╗\n")
-            f.write("║" + " SECTION 2: REPRODUCTION RESULTS EVALUATION ".center(98) + "║\n")
+            f.write(
+                "║" + " SECTION 2: REPRODUCTION RESULTS EVALUATION ".center(98) + "║\n")
             f.write("╚" + "═"*98 + "╝\n\n")
             f.write(report + "\n\n")
 
@@ -860,7 +950,8 @@ Return ONLY a JSON object (no markdown, no explanation):
             # Section 5: Conclusions
             if conclusions:
                 f.write("╔" + "═"*98 + "╗\n")
-                f.write("║" + " SECTION 5: CONCLUSIONS & RECOMMENDATIONS ".center(98) + "║\n")
+                f.write(
+                    "║" + " SECTION 5: CONCLUSIONS & RECOMMENDATIONS ".center(98) + "║\n")
                 f.write("╚" + "═"*98 + "╝\n\n")
                 f.write(conclusions + "\n\n")
 
@@ -871,6 +962,7 @@ Return ONLY a JSON object (no markdown, no explanation):
 
         logger.info(f"✓ Results saved to: {output_file}")
         logger.info(f"✓ Execution log saved to: {log_file}")
+
 
 def main():
     """Main entry point for CLI usage."""
@@ -910,6 +1002,7 @@ def main():
     if 'error' in results:
         print(f"Error: {results['error']}")
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()

@@ -18,13 +18,15 @@ import time
 
 logger = logging.getLogger(__name__)
 
+
 def _get_python_executable():
     """Get the appropriate Python executable for the current platform."""
     if platform.system() == 'Windows':
         # Try python first, then py launcher
         for cmd in ['python', 'py']:
             try:
-                result = subprocess.run([cmd, '--version'], capture_output=True, text=True)
+                result = subprocess.run(
+                    [cmd, '--version'], capture_output=True, text=True)
                 if result.returncode == 0:
                     return cmd
             except FileNotFoundError:
@@ -33,6 +35,7 @@ def _get_python_executable():
     else:
         # Unix/macOS - prefer python3
         return 'python3'
+
 
 def _get_venv_paths(venv_path: Path):
     """Get platform-specific paths for venv executables.
@@ -51,6 +54,7 @@ def _get_venv_paths(venv_path: Path):
 
     return python_exe, pip_exe, scripts_dir
 
+
 @dataclass
 class CodebaseInfo:
     """Information about a codebase."""
@@ -60,6 +64,7 @@ class CodebaseInfo:
     dependencies: List[str]
     readme_content: Optional[str] = None
 
+
 @dataclass
 class ExperimentConfig:
     """Configuration for running an experiment."""
@@ -68,6 +73,7 @@ class ExperimentConfig:
     env_vars: Dict[str, str]
     working_dir: Path
     timeout: int = 3600  # 1 hour default
+
 
 @dataclass
 class ExperimentResult:
@@ -83,8 +89,10 @@ class ExperimentResult:
         if self.outputs is None:
             self.outputs = {}
 
+
 class ExperimentExecutor:
     """Analyze codebase and execute experiments - Stage 3 of the agent."""
+
     def __init__(self, config=None, paper_name=None):
         """
         Initialize experiment executor.
@@ -98,7 +106,8 @@ class ExperimentExecutor:
         if paper_name:
             log_filename = f"agent_execution_{paper_name}.log"
             file_handler = logging.FileHandler(log_filename)
-            file_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s: %(message)s'))
+            file_handler.setFormatter(logging.Formatter(
+                '%(asctime)s %(levelname)s: %(message)s'))
             self.logger.addHandler(file_handler)
 
     # ============================================================================
@@ -191,7 +200,9 @@ class ExperimentExecutor:
                         entry_points.append(match)
 
         # Sort by likelihood (evaluate > test > main > run > train > experiment)
-        priority_order = ['evaluate', 'test', 'main', 'run', 'train', 'experiment']
+        priority_order = ['evaluate', 'test',
+                          'main', 'run', 'train', 'experiment']
+
         def sort_key(p: Path):
             name = p.stem.lower()
             for i, prefix in enumerate(priority_order):
@@ -296,11 +307,13 @@ class ExperimentExecutor:
             filepath = data_dir / filename
 
             if not filepath.exists():
-                results['warnings'].append(f"Missing {requirements['description']}: {filename}")
+                results['warnings'].append(
+                    f"Missing {requirements['description']}: {filename}")
                 continue
 
             try:
-                line_count = sum(1 for _ in open(filepath, 'r', encoding='utf-8'))
+                line_count = sum(1 for _ in open(
+                    filepath, 'r', encoding='utf-8'))
                 file_size = filepath.stat().st_size
 
                 results['file_stats'][filename] = {
@@ -315,14 +328,16 @@ class ExperimentExecutor:
                         f"(expected >{requirements['min_lines']})"
                     )
                 else:
-                    logger.info(f"✓ {filename}: {line_count} lines, {file_size/(1024*1024):.1f}MB")
+                    logger.info(
+                        f"✓ {filename}: {line_count} lines, {file_size/(1024*1024):.1f}MB")
 
             except Exception as e:
                 results['warnings'].append(f"Error reading {filename}: {e}")
                 results['file_stats'][filename] = {'error': str(e)}
 
         if results['warnings']:
-            logger.warning(f"Data validation found {len(results['warnings'])} issues")
+            logger.warning(
+                f"Data validation found {len(results['warnings'])} issues")
         else:
             logger.info("✓ Data validation passed")
 
@@ -353,7 +368,8 @@ class ExperimentExecutor:
             # Check if all dependencies are installed
             if requirements_path.exists():
                 with open(requirements_path) as f:
-                    reqs = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                    reqs = [line.strip() for line in f if line.strip()
+                            and not line.startswith('#')]
                 missing = []
                 for dep in reqs:
                     result = subprocess.run(
@@ -364,10 +380,12 @@ class ExperimentExecutor:
                     if result.returncode != 0:
                         missing.append(dep)
                 if not missing:
-                    logger.info("✓ Reusing cached venv and dependencies (no install needed)")
+                    logger.info(
+                        "✓ Reusing cached venv and dependencies (no install needed)")
                     venv_ready = True
                 else:
-                    logger.info(f"Some dependencies missing in venv: {missing}")
+                    logger.info(
+                        f"Some dependencies missing in venv: {missing}")
 
         if not venv_exists:
             logger.info("Creating virtual environment...")
@@ -386,7 +404,8 @@ class ExperimentExecutor:
         if dependencies and not venv_ready:
             python_executable, _, _ = _get_venv_paths(venv_path)
             logger.info(f"Installing {len(dependencies)} dependencies...")
-            logger.info("⏳ This may take a few minutes depending on package sizes...")
+            logger.info(
+                "⏳ This may take a few minutes depending on package sizes...")
             logger.info(f"   (Timeout: 30 minutes)")
 
             for dep in dependencies:
@@ -404,12 +423,14 @@ class ExperimentExecutor:
                     logger.error(f"✗ Failed to install {dep}: {e.stderr}")
                     return False
                 except subprocess.TimeoutExpired:
-                    logger.error(f"✗ Timeout installing {dep} after 30 minutes")
+                    logger.error(
+                        f"✗ Timeout installing {dep} after 30 minutes")
                     return False
             logger.info("✓ All dependencies installed successfully")
             return True
 
-        logger.info("✓ Environment setup complete (venv cached if previously installed)")
+        logger.info(
+            "✓ Environment setup complete (venv cached if previously installed)")
         return True
 
     # ============================================================================
@@ -470,7 +491,8 @@ class ExperimentExecutor:
 
         except subprocess.TimeoutExpired:
             duration = time.time() - start_time
-            logger.error(f"Experiment timed out after {config.timeout} seconds")
+            logger.error(
+                f"Experiment timed out after {config.timeout} seconds")
             return ExperimentResult(
                 success=False,
                 stdout="",
