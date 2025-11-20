@@ -29,7 +29,17 @@ The agent uses the following **4-stage pipeline**:
 
 4. **Run the agent:**
    ```bash
+   # Run with auto-detection (default paper and codebase)
    python3 run_EVALLab.py
+
+   # Run with a specific paper PDF
+   python3 run_EVALLab.py papers/YourPaper.pdf
+
+   # Run with a specific paper and local codebase directory
+   python3 run_EVALLab.py papers/YourPaper.pdf --code ./papers_source_code/your_code_dir
+
+   # If no GitHub repo is found in the paper, the agent will use the provided local codebase path
+   # or fallback to papers_source_code/ if available.
    ```
 
 ## Performance
