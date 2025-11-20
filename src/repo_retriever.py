@@ -64,6 +64,12 @@ class RepoRetriever:
                 return None
             # Check if it's a local path
             elif local_path.exists():
+                # If supplementary_material, prefer 'code' subdir if present
+                if local_path.name == 'supplementary_material':
+                    code_dir = local_path / 'code'
+                    if code_dir.exists() and code_dir.is_dir():
+                        logger.info(f"✓ Using 'code' directory in supplementary_material: {code_dir}")
+                        return code_dir
                 logger.info(f"✓ Using user-provided codebase: {local_path}")
                 return local_path
             else:
