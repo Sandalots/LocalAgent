@@ -343,7 +343,33 @@ class ExperimentExecutor:
 
         # Check if virtual environment exists
         venv_path = codebase_path / 'venv'
-        if not venv_path.exists():
+        venv_exists = venv_path.exists()
+        requirements_path = codebase_path / 'requirements.txt'
+
+        # Check if venv is already set up and dependencies installed
+        venv_ready = False
+        if venv_exists:
+            python_executable, _, _ = _get_venv_paths(venv_path)
+            # Check if all dependencies are installed
+            if requirements_path.exists():
+                with open(requirements_path) as f:
+                    reqs = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                missing = []
+                for dep in reqs:
+                    result = subprocess.run(
+                        [str(python_executable), '-m', 'pip', 'show', dep],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode != 0:
+                        missing.append(dep)
+                if not missing:
+                    logger.info("✓ Reusing cached venv and dependencies (no install needed)")
+                    venv_ready = True
+                else:
+                    logger.info(f"Some dependencies missing in venv: {missing}")
+
+        if not venv_exists:
             logger.info("Creating virtual environment...")
             try:
                 python_cmd = _get_python_executable()
@@ -356,8 +382,8 @@ class ExperimentExecutor:
                 logger.error(f"Failed to create virtual environment: {e}")
                 return False
 
-        # Install dependencies
-        if dependencies:
+        # Install dependencies if not already installed
+        if dependencies and not venv_ready:
             python_executable, _, _ = _get_venv_paths(venv_path)
             logger.info(f"Installing {len(dependencies)} dependencies...")
             logger.info("⏳ This may take a few minutes depending on package sizes...")
@@ -383,6 +409,7 @@ class ExperimentExecutor:
             logger.info("✓ All dependencies installed successfully")
             return True
 
+        logger.info("✓ Environment setup complete (venv cached if previously installed)")
         return True
 
     # ============================================================================
