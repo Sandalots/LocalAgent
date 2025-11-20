@@ -85,12 +85,13 @@ class ExperimentResult:
 
 class ExperimentExecutor:
     """Analyze codebase and execute experiments - Stage 3 of the agent."""
-    def __init__(self, config=None):
+    def __init__(self, config=None, paper_name=None):
         """
         Initialize experiment executor.
 
         Args:
             config: Configuration dict from config.yaml
+            paper_name: Name of the paper for per-paper logging
         """
         self.config = config or {}
         self.logger = logger
@@ -399,7 +400,6 @@ class ExperimentExecutor:
             ExperimentResult with outputs and status
         """
         logger.info(f"Running experiment: {config.script_path}")
-            logger.info(f"Running experiment: {config.script_path}")
 
         start_time = time.time()
 

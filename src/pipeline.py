@@ -165,7 +165,13 @@ class ReproductionAgent:
         # Initialize components (using new 4-stage architecture)
         self.paper_parser = PaperParser()
         self.repo_retriever = RepoRetriever()
-        self.experiment_executor = ExperimentExecutor(config=self.config)
+        # Extract paper name for per-paper logging
+        paper_name = None
+        if hasattr(self, 'paper_path') and self.paper_path:
+            paper_name = Path(self.paper_path).stem
+        elif 'paper' in self.config and self.config['paper']:
+            paper_name = Path(self.config['paper']).stem
+        self.experiment_executor = ExperimentExecutor(config=self.config, paper_name=paper_name)
         self.result_evaluator = ResultEvaluator(
             llm_client=self,  # Pass self as we have integrated LLM methods
             threshold=self.config['evaluation']['threshold']
