@@ -93,6 +93,20 @@ class ExperimentResult:
 class ExperimentExecutor:
     """Analyze codebase and execute experiments - Stage 3 of the agent."""
 
+    def _collect_outputs(self, working_dir: Path) -> dict:
+        """Collect output files from experiment execution."""
+        outputs = {}
+        # Look for common output patterns
+        output_patterns = ['output*.json', 'results*.json', '*.json']
+        for pattern in output_patterns:
+            for output_file in working_dir.glob(pattern):
+                try:
+                    with open(output_file, 'r') as f:
+                        outputs[output_file.name] = json.load(f)
+                except Exception as e:
+                    self.logger.debug(f"Could not parse {output_file}: {e}")
+        return outputs
+
     def __init__(self, config=None, paper_name=None):
         """
         Initialize experiment executor.
@@ -214,11 +228,30 @@ class ExperimentExecutor:
         return entry_points
 
     def _extract_dependencies(self, path: Path, language: str) -> List[str]:
-        """Extract project dependencies from requirements files."""
+        """Extract project dependencies from requirements files and entry script imports."""
         dependencies = []
 
+        # Auto-detect additional dependencies from entry script imports
+        entry_points = self._find_entry_points(path, language)
+        if entry_points:
+            main_script = entry_points[0]
+            try:
+                with open(main_script, 'r', encoding='utf-8') as f:
+                    code = f.read()
+                    import_lines = [line for line in code.splitlines() if line.strip().startswith('import') or line.strip().startswith('from')]
+                    for line in import_lines:
+                        if 'numpy' in line and 'numpy' not in dependencies:
+                            dependencies.append('numpy')
+                        if 'matplotlib' in line and 'matplotlib' not in dependencies:
+                            dependencies.append('matplotlib')
+                        if 'torch' in line and 'torch' not in dependencies:
+                            dependencies.append('torch')
+                        if 'torchvision' in line and 'torchvision' not in dependencies:
+                            dependencies.append('torchvision')
+            except Exception as e:
+                self.logger.warning(f"Error auto-detecting dependencies from entry script: {e}")
+
         if language == 'python':
-            # List of possible requirements files
             req_files = [
                 'requirements.txt',
                 'floyd_requirements.txt',
@@ -226,31 +259,48 @@ class ExperimentExecutor:
                 'requirements-prod.txt',
                 'requirements_test.txt',
             ]
+            found_req = False
             for req_name in req_files:
                 req_file = path / req_name
                 if req_file.exists():
-                    logger.info(f"✓ Found requirements file: {req_file.name}")
+                    found_req = True
+                    self.logger.info(f"✓ Found requirements file: {req_file.name}")
                     try:
                         with open(req_file, 'r') as f:
                             for line in f:
                                 line = line.strip()
                                 if line and not line.startswith('#'):
                                     dep = line.split('#')[0].strip()
-                                    if dep:
+                                    if dep and dep not in dependencies:
                                         dependencies.append(dep)
                     except Exception as e:
-                        logger.warning(f"Error reading {req_file.name}: {e}")
+                        self.logger.warning(f"Error reading {req_file.name}: {e}")
 
-            # Check setup.py for install_requires
             setup_file = path / 'setup.py'
             if setup_file.exists():
                 try:
                     with open(setup_file, 'r') as f:
                         content = f.read()
                         if 'install_requires' in content:
-                            logger.debug("Found install_requires in setup.py")
+                            self.logger.debug("Found install_requires in setup.py")
                 except Exception as e:
-                    logger.warning(f"Error reading setup.py: {e}")
+                    self.logger.warning(f"Error reading setup.py: {e}")
+
+            # If no requirements.txt, parse README for PyTorch
+            if not found_req:
+                readme_path = path / 'README.md'
+                if readme_path.exists():
+                    try:
+                        with open(readme_path, 'r', encoding='utf-8') as f:
+                            readme = f.read().lower()
+                            if 'pytorch' in readme or 'torchvision' in readme:
+                                self.logger.info("✓ README mentions PyTorch, adding torch and torchvision to dependencies")
+                                if 'torch' not in dependencies:
+                                    dependencies.append('torch')
+                                if 'torchvision' not in dependencies:
+                                    dependencies.append('torchvision')
+                    except Exception as e:
+                        self.logger.warning(f"Error reading README.md: {e}")
 
         return dependencies
 
@@ -447,15 +497,28 @@ class ExperimentExecutor:
         Returns:
             ExperimentResult with outputs and status
         """
-        logger.info(f"Running experiment: {config.script_path}")
+
+        self.logger.info(f"[run_experiment] Starting experiment: {config.script_path}")
+        self.logger.info(f"[run_experiment] Command: {config.script_path}")
+        self.logger.info(f"[run_experiment] Args: {config.args}")
+        self.logger.info(f"[run_experiment] Working directory: {config.working_dir if config.working_dir else config.script_path.parent}")
+        self.logger.info(f"[run_experiment] Environment variables: {config.env_vars}")
 
         start_time = time.time()
+        from datetime import datetime
+        start_time_str = datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')
+        self.logger.info(f"[run_experiment] Start time: {start_time_str}")
 
         # Ensure script_path is absolute
         script_path = config.script_path.resolve()
 
-        # Prepare command with platform-specific Python
-        python_cmd = _get_python_executable()
+        # Use venv python if available
+        venv_path = config.working_dir / 'venv'
+        if venv_path.exists():
+            python_executable, _, _ = _get_venv_paths(venv_path)
+            python_cmd = str(python_executable)
+        else:
+            python_cmd = _get_python_executable()
         cmd = [python_cmd, str(script_path)] + config.args
 
         # Prepare environment variables
@@ -466,6 +529,7 @@ class ExperimentExecutor:
         working_dir = config.working_dir if config.working_dir else script_path.parent
 
         try:
+            self.logger.info(f"[run_experiment] Running subprocess: {' '.join(cmd)}")
             result = subprocess.run(
                 cmd,
                 cwd=str(working_dir),
@@ -476,9 +540,51 @@ class ExperimentExecutor:
             )
 
             duration = time.time() - start_time
+            end_time_str = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            self.logger.info(f"[run_experiment] End time: {end_time_str}")
+            self.logger.info(f"[run_experiment] Duration: {duration:.2f} seconds")
 
             # Try to parse any JSON output files
             outputs = self._collect_outputs(working_dir)
+
+            # Log full stdout and stderr for debugging
+            if result.returncode != 0:
+                self.logger.error(f"Experiment failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+
+                # Auto-retry if dataset error detected
+                if 'Dataset not found or corrupted' in result.stderr and 'download=False' in result.stderr:
+                    self.logger.warning("[run_experiment] Detected missing dataset error. Retrying with download=True...")
+                    # Try to patch args if possible
+                    # If script supports --download, add it
+                    if '--download' not in config.args:
+                        patched_args = config.args + ['--download']
+                        cmd2 = [python_cmd, str(script_path)] + patched_args
+                        self.logger.info(f"[run_experiment] Retrying subprocess: {' '.join(cmd2)}")
+                        result2 = subprocess.run(
+                            cmd2,
+                            cwd=str(working_dir),
+                            env=env,
+                            capture_output=True,
+                            text=True,
+                            timeout=config.timeout
+                        )
+                        duration2 = time.time() - start_time
+                        self.logger.info(f"[run_experiment] Retry duration: {duration2:.2f} seconds")
+                        outputs2 = self._collect_outputs(working_dir)
+                        if result2.returncode != 0:
+                            self.logger.error(f"Experiment retry failed.\nSTDOUT:\n{result2.stdout}\nSTDERR:\n{result2.stderr}")
+                        else:
+                            self.logger.info(f"[run_experiment] Experiment retry completed successfully.\nSTDOUT:\n{result2.stdout}")
+                        return ExperimentResult(
+                            success=(result2.returncode == 0),
+                            stdout=result2.stdout,
+                            stderr=result2.stderr,
+                            return_code=result2.returncode,
+                            duration=duration2,
+                            outputs=outputs2
+                        )
+            else:
+                self.logger.info(f"[run_experiment] Experiment completed successfully.\nSTDOUT:\n{result.stdout}")
 
             return ExperimentResult(
                 success=(result.returncode == 0),
@@ -491,8 +597,7 @@ class ExperimentExecutor:
 
         except subprocess.TimeoutExpired:
             duration = time.time() - start_time
-            logger.error(
-                f"Experiment timed out after {config.timeout} seconds")
+            self.logger.error(f"Experiment timed out after {config.timeout} seconds")
             return ExperimentResult(
                 success=False,
                 stdout="",
@@ -501,29 +606,14 @@ class ExperimentExecutor:
                 duration=duration
             )
         except Exception as e:
+            import traceback
             duration = time.time() - start_time
-            logger.error(f"Experiment failed with error: {e}")
+            tb = traceback.format_exc()
+            self.logger.error(f"Experiment failed with error: {e}\n{tb}")
             return ExperimentResult(
                 success=False,
                 stdout="",
-                stderr=str(e),
+                stderr=tb,
                 return_code=-1,
                 duration=duration
             )
-
-    def _collect_outputs(self, working_dir: Path) -> Dict[str, Any]:
-        """Collect output files from experiment execution."""
-        outputs = {}
-
-        # Look for common output patterns
-        output_patterns = ['output*.json', 'results*.json', '*.json']
-
-        for pattern in output_patterns:
-            for output_file in working_dir.glob(pattern):
-                try:
-                    with open(output_file, 'r') as f:
-                        outputs[output_file.name] = json.load(f)
-                except Exception as e:
-                    logger.debug(f"Could not parse {output_file}: {e}")
-
-        return outputs
