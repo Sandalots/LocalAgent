@@ -82,15 +82,22 @@ class RepoRetriever:
                 return cloned_path
 
         # Priority 3: Check papers_source_code directory (fallback)
-        local_code = self._find_local_code()
-        if local_code:
-            logger.info(f"✓ Using local codebase (fallback): {local_code}")
-            return local_code
-
+        # Only fallback to Decontextualisation codebase if the paper is Decontextualisation
+        import re
+        paper_name = None
+        if hasattr(self, 'paper_path') and self.paper_path:
+            paper_name = str(self.paper_path).lower()
+        if paper_name and ('decontextualisation' in paper_name or 'decontextualization' in paper_name):
+            local_code = self._find_local_code()
+            if local_code:
+                logger.info(f"✓ Using local codebase (fallback): {local_code}")
+                return local_code
+        # Otherwise, do not fallback, prompt for codebase or fail gracefully
         logger.error("❌ No codebase found! Checked:")
         logger.error(f"  - User-provided path: {local_path}")
         logger.error(f"  - GitHub URLs: {github_urls}")
         logger.error(f"  - Local directory: {self.paper_source_dir}")
+        logger.error("🛑 Please specify a codebase using the --code argument or ensure the paper contains a valid GitHub repository link.")
         return None
 
     def _find_local_code(self) -> Optional[Path]:
