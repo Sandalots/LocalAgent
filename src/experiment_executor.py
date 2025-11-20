@@ -344,14 +344,14 @@ class ExperimentExecutor:
 
         # Install dependencies
         if dependencies:
-            _, pip_executable, _ = _get_venv_paths(venv_path)
+            python_executable, _, _ = _get_venv_paths(venv_path)
             logger.info(f"Installing {len(dependencies)} dependencies...")
             logger.info("⏳ This may take a few minutes depending on package sizes...")
             logger.info(f"   (Timeout: 10 minutes)")
 
             try:
                 subprocess.run(
-                    [str(pip_executable), 'install'] + dependencies,
+                    [str(python_executable), '-m', 'pip', 'install'] + dependencies,
                     check=True,
                     capture_output=True,
                     text=True,

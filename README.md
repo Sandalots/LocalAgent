@@ -24,8 +24,8 @@ The agent uses the following **4-stage pipeline**:
    ```
 
 3. **Place paper code in the correct directory:**
-   - Put the `supplementary_material` directory inside `paper_source_code/`
-   - Final structure: `paper_source_code/supplementary_material/`
+   - Put the `supplementary_material` directory inside `papers_source_code/`
+   - Final structure: `papers_source_code/supplementary_material/`
 
 4. **Run the agent:**
    ```bash

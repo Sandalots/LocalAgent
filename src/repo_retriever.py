@@ -24,7 +24,7 @@ class RepoRetriever:
             workspace_root: Root directory of the workspace (defaults to current dir)
         """
         self.workspace_root = workspace_root or Path.cwd()
-        self.paper_source_dir = self.workspace_root / "paper_source_code"
+        self.paper_source_dir = self.workspace_root / "papers_source_code"
 
     def retrieve_code(self, github_urls: List[str] = None,
                      local_path: Path = None) -> Optional[Path]:
@@ -32,7 +32,7 @@ class RepoRetriever:
         Retrieve code from available sources with the following priority:
         1. User-provided path/URL (--code argument) - local path OR GitHub URL
         2. GitHub URLs from the paper (paper-specific)
-        3. Local paper_source_code directory (fallback/default)
+        3. Local papers_source_code directory (fallback/default)
 
         Args:
             github_urls: List of GitHub repository URLs found in paper
@@ -81,7 +81,7 @@ class RepoRetriever:
                 logger.info(f"✓ Using paper-specific GitHub repository")
                 return cloned_path
 
-        # Priority 3: Check paper_source_code directory (fallback)
+        # Priority 3: Check papers_source_code directory (fallback)
         local_code = self._find_local_code()
         if local_code:
             logger.info(f"✓ Using local codebase (fallback): {local_code}")
@@ -95,7 +95,7 @@ class RepoRetriever:
 
     def _find_local_code(self) -> Optional[Path]:
         """
-        Find code in the local paper_source_code directory.
+        Find code in the local papers_source_code directory.
         Looks for supplementary_material/code or similar structures.
 
         Returns:

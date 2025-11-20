@@ -346,8 +346,8 @@ class ReproductionAgent:
         Run the complete reproduction workflow.
 
         Args:
-            paper_path: Path to the research paper PDF (if None, searches ./paper/ directory)
-            codebase_source: Either GitHub URL or path to local codebase (if None, searches ./paper_source_code/)
+            paper_path: Path to the research paper PDF (if None, searches ./papers/ directory)
+            codebase_source: Either GitHub URL or path to local codebase (if None, searches ./papers_source_code/)
 
         Returns:
             Dictionary with results and evaluation
@@ -367,10 +367,10 @@ class ReproductionAgent:
                     paper_path = pdf_files[0]
                     logger.info(f"✓ Auto-detected paper: {paper_path.name}")
                 else:
-                    logger.error("No PDF files found in ./paper/ directory")
+                    logger.error("No PDF files found in ./papers/ directory")
                     return {'error': 'No paper PDF found'}
             else:
-                logger.error("./paper/ directory not found")
+                logger.error("./papers/ directory not found")
                 return {'error': 'No paper directory found'}
 
         # Step 1: Check Ollama availability
@@ -447,17 +447,17 @@ class ReproductionAgent:
             print("\033[91m├" + "─"*78 + "┤\033[0m")
             print("\033[91m│\033[0m" + " Unable to find experiment code from any source.".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + " 💡 SOLUTION: Manually add codebase to ./paper_source_code/".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + " 💡 SOLUTION: Manually add codebase to ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + "   Steps:".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   1. Create ./paper_source_code/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   1. Create ./papers_source_code/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + "   2. Place your experiment codebase inside it".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + "   3. Run the agent again".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " Checked:".ljust(78) + "\033[91m│\033[0m")
             if local_path:
                 print("\033[91m│\033[0m" + f"   ✗ User path: {local_path}".ljust(78) + "\033[91m│\033[0m")
-            print("\033[91m│\033[0m" + "   ✗ Local directory: ./paper_source_code/".ljust(78) + "\033[91m│\033[0m")
+            print("\033[91m│\033[0m" + "   ✗ Local directory: ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
             if paper_content.github_urls:
                 print("\033[91m│\033[0m" + f"   ✗ GitHub URLs: {len(paper_content.github_urls)} found but failed to clone".ljust(78) + "\033[91m│\033[0m")
             else:
@@ -465,7 +465,7 @@ class ReproductionAgent:
             print("\033[91m└" + "─"*78 + "┘\033[0m")
             print("="*80 + "\n")
             logger.error("No codebase available!")
-            return {'error': 'No codebase available - please add code to ./paper_source_code/'}
+            return {'error': 'No codebase available - please add code to ./papers_source_code/'}
 
         logger.info(f"✓ Codebase retrieved at: {codebase_path}")
 
@@ -877,12 +877,12 @@ def main():
         'paper_path',
         nargs='?',  # Make optional
         type=Path,
-        help='Path to research paper PDF (default: auto-detect from ./paper/)'
+        help='Path to research paper PDF (default: auto-detect from ./papers/)'
     )
     parser.add_argument(
         '--codebase',
         type=str,
-        help='GitHub URL or local path to codebase (default: auto-detect from ./paper_source_code/)'
+        help='GitHub URL or local path to codebase (default: auto-detect from ./papers_source_code/)'
     )
     parser.add_argument(
         '--config',

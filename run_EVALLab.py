@@ -15,13 +15,13 @@ def main():
         epilog='''
 Examples:
   python3 run_EVALLab.py                                    # Auto-detect or use Decontextualisation.pdf
-  python3 run_EVALLab.py paper/MyPaper.pdf                  # Specific paper
-  python3 run_EVALLab.py paper/MyPaper.pdf --code ./my_code # Specific paper + local code
+    python3 run_EVALLab.py papers/MyPaper.pdf                  # Specific paper
+    python3 run_EVALLab.py papers/MyPaper.pdf --code ./my_code # Specific paper + local code
   python3 run_EVALLab.py --code https://github.com/user/repo # Auto-detect paper + GitHub code
         '''
     )
-    parser.add_argument('paper', nargs='?', type=str, help='Path to research paper PDF (default: paper/Decontextualisation.pdf or auto-detect)')
-    parser.add_argument('--code', type=str, help='Path to local codebase or GitHub URL (default: auto-detect from paper_source_code/ or paper)')
+    parser.add_argument('paper', nargs='?', type=str, help='Path to research paper PDF (default: papers/Decontextualisation.pdf or auto-detect)')
+    parser.add_argument('--code', type=str, help='Path to local codebase or GitHub URL (default: auto-detect from papers_source_code/ or papers)')
     
     args = parser.parse_args()
     
@@ -111,8 +111,8 @@ Examples:
     
     # Resolve paper path
     workspace_root = Path(__file__).parent
-    paper_dir = workspace_root / "paper"
-    paper_source_dir = workspace_root / "paper_source_code"
+    paper_dir = workspace_root / "papers"
+    paper_source_dir = workspace_root / "papers_source_code"
     
     paper_path = None
     if args.paper:
@@ -135,18 +135,18 @@ Examples:
             paper_path = default_paper
             print(f"✓ Using default paper: {default_paper.name}")
         else:
-            # Priority 2 - Any PDF in paper/
+            # Priority 2 - Any PDF in papers/
             if paper_dir.exists():
                 pdf_files = list(paper_dir.glob("*.pdf"))
                 if pdf_files:
                     paper_path = pdf_files[0]
                     print(f"✓ Auto-detected paper: {paper_path.name}")
                 else:
-                    print(f"❌ No PDF files found in ./paper/")
-                    print("   Please add your research paper PDF to ./paper/")
+                    print(f"❌ No PDF files found in ./papers/")
+                    print("   Please add your research paper PDF to ./papers/")
                     return 1
             else:
-                print(f"❌ ./paper/ directory not found!")
+                print(f"❌ ./papers/ directory not found!")
                 print("   Please create it and add your research paper PDF")
                 return 1
     
@@ -165,20 +165,20 @@ Examples:
                 return 1
             print(f"📦 Code source: {args.code} (local)")
     else:
-        print(f"📦 Code source: auto-detect (paper_source_code/ or GitHub URLs from paper)")
+        print(f"📦 Code source: auto-detect (papers_source_code/ or GitHub URLs from papers)")
     
     print("\n📍 Checking workspace structure...")
     
     if not paper_dir.exists():
-        print(f"❌ ./paper/ directory not found!")
+        print(f"❌ ./papers/ directory not found!")
         print("   Please create it and add your research paper PDF")
         return 1
     
-    # Check for any code in paper_source_code directory
+    # Check for any code in papers_source_code directory
     if not paper_source_dir.exists():
-        print(f"⚠️  ./paper_source_code/ directory not found!")
+        print(f"⚠️  ./papers_source_code/ directory not found!")
         print("   📁 The agent will search for GitHub URLs in the paper.")
-        print("   💡 Or create ./paper_source_code/ and place codebase there manually.")
+        print("   💡 Or create ./papers_source_code/ and place codebase there manually.")
     else:
         # Check if there are any subdirectories or Python files
         has_code = any(paper_source_dir.iterdir())
@@ -190,9 +190,9 @@ Examples:
             else:
                 print(f"✓ Found files in: {paper_source_dir}")
         else:
-            print(f"⚠️  ./paper_source_code/ exists but is empty!")
+            print(f"⚠️  ./papers_source_code/ exists but is empty!")
             print("   📁 The agent will search for GitHub URLs in the paper.")
-            print("   💡 Or place your codebase in ./paper_source_code/ manually.")
+            print("   💡 Or place your codebase in ./papers_source_code/ manually.")
     
     # Check Ollama
     print("\n🔍 Checking Ollama...")
