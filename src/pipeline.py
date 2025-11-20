@@ -738,29 +738,52 @@ class ReproductionAgent:
 
     def _extract_paper_sections(self, raw_text: str) -> dict:
         """Use LLM to extract key sections from paper."""
-        system_prompt = """You are an expert at reading research papers.
-Extract the following sections: abstract, methodology, experiments, and results.
-Return ONLY valid JSON with these exact keys. Each value should be a detailed text string."""
-        # Truncate text to fit in context window
-        truncated_text = raw_text[:8000]
+        system_prompt = (
+            "You are an expert at reading research papers. "
+            "Extract the following sections: abstract, methodology, experiments, and results. "
+            "Return ONLY valid JSON with these exact keys: 'abstract', 'methodology', 'experiments', 'results'. "
+            "Do NOT use a 'sections' array or any other structure. "
+            "Each value should be a full, detailed paragraph or set of paragraphs, not a summary. "
+            "Do not truncate or omit information. "
+            "If a section is long, include as much as possible. "
+            "Do not include markdown, explanations, or any text outside the JSON object."
+        )
+        # Truncate text to fit in context window (increase limit if possible)
+        truncated_text = raw_text[:16000]
 
-        user_prompt = f"""Extract the following sections from this research paper and return as JSON:
-1. abstract - The paper's abstract
-2. methodology - The approach/methodology section
-3. experiments - The experimental setup and evaluation
-4. results - The results and findings
-
-Paper text:
-{truncated_text}
-
-Return ONLY a JSON object (no markdown, no explanation):
-{{"abstract": "text here", "methodology": "text here", "experiments": "text here", "results": "text here"}}"""
+        user_prompt = (
+            "Extract the following sections from this research paper and return as a flat JSON object. "
+            "The JSON must have ONLY these keys: 'abstract', 'methodology', 'experiments', 'results'. "
+            "Do NOT use a 'sections' array or any other structure. "
+            "Each section should be a full, detailed paragraph or set of paragraphs, not a summary. "
+            "Do not truncate or omit information. "
+            "If a section is long, include as much as possible. "
+            "Return ONLY a JSON object (no markdown, no explanation):\n"
+            "{\"abstract\": \"text here\", \"methodology\": \"text here\", "
+            "\"experiments\": \"text here\", \"results\": \"text here\"}"
+        ) + f"\nPaper text:\n{truncated_text}"
         try:
             sections = self.extract_json(user_prompt, system_prompt)
+            # Fallback: If sections is a dict with a 'sections' key, try to extract from array
+            if isinstance(sections, dict) and 'sections' in sections:
+                flat_sections = {"abstract": "", "methodology": "", "experiments": "", "results": ""}
+                for item in sections['sections']:
+                    name = item.get('name', '').lower()
+                    content = item.get('content', '')
+                    if 'abstract' in name:
+                        flat_sections['abstract'] += str(content) + '\n'
+                    elif 'methodology' in name or 'approach' in name:
+                        flat_sections['methodology'] += str(content) + '\n'
+                    elif 'experiment' in name:
+                        flat_sections['experiments'] += str(content) + '\n'
+                    elif 'result' in name:
+                        flat_sections['results'] += str(content) + '\n'
+                return flat_sections
             # Ensure all keys exist
             default_sections = {
                 "abstract": "", "methodology": "", "experiments": "", "results": ""}
-            default_sections.update(sections)
+            if isinstance(sections, dict):
+                default_sections.update(sections)
             return default_sections
         except Exception as e:
             logger.error(f"Failed to extract sections with LLM: {e}")

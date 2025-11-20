@@ -529,16 +529,32 @@ class ExperimentExecutor:
         working_dir = config.working_dir if config.working_dir else script_path.parent
 
         try:
+
+            import subprocess
             self.logger.info(f"[run_experiment] Running subprocess: {' '.join(cmd)}")
-            result = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=str(working_dir),
                 env=env,
-                capture_output=True,
-                text=True,
-                timeout=config.timeout
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
-
+            last_log_time = start_time
+            poll_interval = 10  # seconds
+            log_interval = 300  # 5 minutes
+            while True:
+                retcode = proc.poll()
+                now = time.time()
+                if retcode is not None:
+                    break
+                if now - last_log_time >= log_interval:
+                    elapsed = int((now - start_time) // 60)
+                    self.logger.info(f"[run_experiment] Experiment still running after {elapsed} minutes...")
+                    last_log_time = now
+                time.sleep(poll_interval)
+            # Collect output
+            stdout, stderr = proc.communicate()
             duration = time.time() - start_time
             end_time_str = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             self.logger.info(f"[run_experiment] End time: {end_time_str}")
@@ -548,11 +564,11 @@ class ExperimentExecutor:
             outputs = self._collect_outputs(working_dir)
 
             # Log full stdout and stderr for debugging
-            if result.returncode != 0:
-                self.logger.error(f"Experiment failed.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+            if proc.returncode != 0:
+                self.logger.error(f"Experiment failed.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
 
                 # Auto-retry if dataset error detected
-                if 'Dataset not found or corrupted' in result.stderr and 'download=False' in result.stderr:
+                if 'Dataset not found or corrupted' in stderr and 'download=False' in stderr:
                     self.logger.warning("[run_experiment] Detected missing dataset error. Retrying with download=True...")
                     # Try to patch args if possible
                     # If script supports --download, add it
@@ -560,37 +576,49 @@ class ExperimentExecutor:
                         patched_args = config.args + ['--download']
                         cmd2 = [python_cmd, str(script_path)] + patched_args
                         self.logger.info(f"[run_experiment] Retrying subprocess: {' '.join(cmd2)}")
-                        result2 = subprocess.run(
+                        proc2 = subprocess.Popen(
                             cmd2,
                             cwd=str(working_dir),
                             env=env,
-                            capture_output=True,
-                            text=True,
-                            timeout=config.timeout
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True
                         )
+                        last_log_time2 = time.time()
+                        while True:
+                            retcode2 = proc2.poll()
+                            now2 = time.time()
+                            if retcode2 is not None:
+                                break
+                            if now2 - last_log_time2 >= log_interval:
+                                elapsed2 = int((now2 - start_time) // 60)
+                                self.logger.info(f"[run_experiment] Experiment retry still running after {elapsed2} minutes...")
+                                last_log_time2 = now2
+                            time.sleep(poll_interval)
+                        stdout2, stderr2 = proc2.communicate()
                         duration2 = time.time() - start_time
                         self.logger.info(f"[run_experiment] Retry duration: {duration2:.2f} seconds")
                         outputs2 = self._collect_outputs(working_dir)
-                        if result2.returncode != 0:
-                            self.logger.error(f"Experiment retry failed.\nSTDOUT:\n{result2.stdout}\nSTDERR:\n{result2.stderr}")
+                        if proc2.returncode != 0:
+                            self.logger.error(f"Experiment retry failed.\nSTDOUT:\n{stdout2}\nSTDERR:\n{stderr2}")
                         else:
-                            self.logger.info(f"[run_experiment] Experiment retry completed successfully.\nSTDOUT:\n{result2.stdout}")
+                            self.logger.info(f"[run_experiment] Experiment retry completed successfully.\nSTDOUT:\n{stdout2}")
                         return ExperimentResult(
-                            success=(result2.returncode == 0),
-                            stdout=result2.stdout,
-                            stderr=result2.stderr,
-                            return_code=result2.returncode,
+                            success=(proc2.returncode == 0),
+                            stdout=stdout2,
+                            stderr=stderr2,
+                            return_code=proc2.returncode,
                             duration=duration2,
                             outputs=outputs2
                         )
             else:
-                self.logger.info(f"[run_experiment] Experiment completed successfully.\nSTDOUT:\n{result.stdout}")
+                self.logger.info(f"[run_experiment] Experiment completed successfully.\nSTDOUT:\n{stdout}")
 
             return ExperimentResult(
-                success=(result.returncode == 0),
-                stdout=result.stdout,
-                stderr=result.stderr,
-                return_code=result.returncode,
+                success=(proc.returncode == 0),
+                stdout=stdout,
+                stderr=stderr,
+                return_code=proc.returncode,
                 duration=duration,
                 outputs=outputs
             )
