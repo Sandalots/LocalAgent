@@ -200,20 +200,28 @@ class ExperimentExecutor:
         dependencies = []
 
         if language == 'python':
-            # Check requirements.txt
-            req_file = path / 'requirements.txt'
-            if req_file.exists():
-                try:
-                    with open(req_file, 'r') as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith('#'):
-                                # Remove comments and whitespace
-                                dep = line.split('#')[0].strip()
-                                if dep:
-                                    dependencies.append(dep)
-                except Exception as e:
-                    logger.warning(f"Error reading requirements.txt: {e}")
+            # List of possible requirements files
+            req_files = [
+                'requirements.txt',
+                'floyd_requirements.txt',
+                'requirements-dev.txt',
+                'requirements-prod.txt',
+                'requirements_test.txt',
+            ]
+            for req_name in req_files:
+                req_file = path / req_name
+                if req_file.exists():
+                    logger.info(f"✓ Found requirements file: {req_file.name}")
+                    try:
+                        with open(req_file, 'r') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line and not line.startswith('#'):
+                                    dep = line.split('#')[0].strip()
+                                    if dep:
+                                        dependencies.append(dep)
+                    except Exception as e:
+                        logger.warning(f"Error reading {req_file.name}: {e}")
 
             # Check setup.py for install_requires
             setup_file = path / 'setup.py'
@@ -221,7 +229,6 @@ class ExperimentExecutor:
                 try:
                     with open(setup_file, 'r') as f:
                         content = f.read()
-                        # Simple regex-free extraction
                         if 'install_requires' in content:
                             logger.debug("Found install_requires in setup.py")
                 except Exception as e:
@@ -349,22 +356,25 @@ class ExperimentExecutor:
             logger.info("⏳ This may take a few minutes depending on package sizes...")
             logger.info(f"   (Timeout: 10 minutes)")
 
-            try:
-                subprocess.run(
-                    [str(python_executable), '-m', 'pip', 'install'] + dependencies,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=600  # 10 minute timeout
-                )
-                logger.info("✓ Dependencies installed successfully")
-                return True
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install dependencies: {e.stderr}")
-                return False
-            except subprocess.TimeoutExpired:
-                logger.error("Dependency installation timed out after 10 minutes")
-                return False
+            for dep in dependencies:
+                logger.info(f"→ Installing: {dep}")
+                try:
+                    result = subprocess.run(
+                        [str(python_executable), '-m', 'pip', 'install', dep],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=600  # 10 minute timeout
+                    )
+                    logger.info(f"✓ Installed: {dep}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"✗ Failed to install {dep}: {e.stderr}")
+                    return False
+                except subprocess.TimeoutExpired:
+                    logger.error(f"✗ Timeout installing {dep} after 10 minutes")
+                    return False
+            logger.info("✓ All dependencies installed successfully")
+            return True
 
         return True
 
