@@ -531,11 +531,16 @@ class ExperimentExecutor:
             return None
 
 
-        # Force use of workspace .venv for cloned_repos experiments
+        # For cloned_repos: use local .venv if present, else workspace .venv
         workspace_venv_python = Path(__file__).parent.parent / '.venv' / 'bin' / 'python'
         if str(config.working_dir).startswith(str(Path(__file__).parent.parent / 'cloned_repos')):
-            python_cmd = str(workspace_venv_python)
-            self.logger.info(f"[run_experiment] Forcing workspace .venv Python for cloned_repos: {python_cmd}")
+            local_venv_path = Path(config.working_dir) / '.venv'
+            if (local_venv_path / 'bin' / 'python').exists():
+                python_cmd = str(local_venv_path / 'bin' / 'python')
+                self.logger.info(f"[run_experiment] Using local .venv Python for cloned_repo: {python_cmd}")
+            else:
+                python_cmd = str(workspace_venv_python)
+                self.logger.info(f"[run_experiment] Forcing workspace .venv Python for cloned_repo: {python_cmd}")
         else:
             venv_path = find_venv_path(config.working_dir)
             if venv_path:
