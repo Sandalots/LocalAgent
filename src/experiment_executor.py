@@ -530,25 +530,32 @@ class ExperimentExecutor:
                         return venv_candidate
             return None
 
-        venv_path = find_venv_path(config.working_dir)
-        if venv_path:
-            bin_dir = venv_path / ('Scripts' if platform.system() == 'Windows' else 'bin')
-            python3_path = bin_dir / 'python3'
-            python_path = bin_dir / 'python'
-            python_executable = None
-            if python3_path.exists() and os.access(python3_path, os.X_OK):
-                python_executable = python3_path.resolve()
-            elif python_path.exists() and os.access(python_path, os.X_OK):
-                python_executable = python_path.resolve()
-            if python_executable:
-                python_cmd = str(python_executable)
-                self.logger.info(f"[run_experiment] Using venv Python: {python_cmd}")
-            else:
-                self.logger.error(f"No executable python found in venv: {venv_path}. Aborting experiment.")
-                return ExperimentResult(success=False, stdout='', stderr='No executable python in venv', return_code=127, duration=0.0, outputs={})
+
+        # Force use of workspace .venv for cloned_repos experiments
+        workspace_venv_python = Path(__file__).parent.parent / '.venv' / 'bin' / 'python'
+        if str(config.working_dir).startswith(str(Path(__file__).parent.parent / 'cloned_repos')):
+            python_cmd = str(workspace_venv_python)
+            self.logger.info(f"[run_experiment] Forcing workspace .venv Python for cloned_repos: {python_cmd}")
         else:
-            python_cmd = _get_python_executable()
-            self.logger.info(f"[run_experiment] No venv found, using workspace Python: {python_cmd}")
+            venv_path = find_venv_path(config.working_dir)
+            if venv_path:
+                bin_dir = venv_path / ('Scripts' if platform.system() == 'Windows' else 'bin')
+                python3_path = bin_dir / 'python3'
+                python_path = bin_dir / 'python'
+                python_executable = None
+                if python3_path.exists() and os.access(python3_path, os.X_OK):
+                    python_executable = python3_path.resolve()
+                elif python_path.exists() and os.access(python_path, os.X_OK):
+                    python_executable = python_path.resolve()
+                if python_executable:
+                    python_cmd = str(python_executable)
+                    self.logger.info(f"[run_experiment] Using venv Python: {python_cmd}")
+                else:
+                    python_cmd = _get_python_executable()
+                    self.logger.info(f"[run_experiment] No venv found, using workspace Python: {python_cmd}")
+            else:
+                python_cmd = _get_python_executable()
+                self.logger.info(f"[run_experiment] No venv found, using workspace Python: {python_cmd}")
         cmd = [python_cmd, str(script_path)] + config.args
 
         # Prepare environment variables
