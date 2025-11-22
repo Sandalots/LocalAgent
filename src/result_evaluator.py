@@ -1551,6 +1551,26 @@ Provide a concise analysis (3-4 paragraphs)."""
             color: #7f8c8d;
             border-top: 1px solid #bdc3c7;
         }}
+        .metrics-table-wrapper {{
+            overflow-x: auto;
+            width: 100%;
+            margin-bottom: 24px;
+        }}
+        .metrics-table {{
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 700px;
+        }}
+        .metrics-table th, .metrics-table td {{
+            padding: 8px 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+            white-space: nowrap;
+        }}
+        .diff-pos {{ color: #27ae60; font-weight: bold; }}
+        .diff-neg {{ color: #e74c3c; font-weight: bold; }}
+        .status-pass {{ color: #27ae60; font-weight: bold; }}
+        .status-fail {{ color: #e74c3c; font-weight: bold; }}
     </style>
 </head>
 <body>
@@ -1609,6 +1629,7 @@ Provide a concise analysis (3-4 paragraphs)."""
         html += f"""
     <div class="visualization">
         <h2>Metric Comparison Table</h2>
+        <div class="metrics-table-wrapper">
         <table class="metrics-table">
             <tr>
                 <th>Configuration</th>
@@ -1618,17 +1639,26 @@ Provide a concise analysis (3-4 paragraphs)."""
                 <th>Diff (%)</th>
                 <th>Status</th>
             </tr>
-            {''.join([
-                f'<tr>'
-                f'<td>{row["configuration"]}</td>'
-                f'<td>{row["metric_name"]}</td>'
-                f'<td>{row["baseline_value"]:.4f}</td>'
-                f'<td>{row["reproduced_value"]:.4f}</td>'
-                f'<td>{row["percent_difference"]:.2f}</td>'
-                f'<td class="{"pass" if row["within_threshold"] else "fail"}">{"PASS" if row["within_threshold"] else "FAIL"}</td>'
-                f'</tr>' for _, row in df.iterrows()
-            ])}
+            {self._build_metrics_table_rows(df)}
+            def _build_metrics_table_rows(self, df):
+                rows = []
+                for _, row in df.iterrows():
+                    diff_class = 'diff-pos' if row["percent_difference"] >= 0 else 'diff-neg'
+                    status_class = 'status-pass' if row["within_threshold"] else 'status-fail'
+                    status_text = 'PASS' if row["within_threshold"] else 'FAIL'
+                    rows.append(
+                        f'<tr>'
+                        f'<td>{row["configuration"]}</td>'
+                        f'<td>{row["metric_name"]}</td>'
+                        f'<td>{row["baseline_value"]:.4f}</td>'
+                        f'<td>{row["reproduced_value"]:.4f}</td>'
+                        f'<td class="{diff_class}">{row["percent_difference"]:.2f}</td>'
+                        f'<td class="{status_class}">{status_text}</td>'
+                        f'</tr>'
+                    )
+                return ''.join(rows)
         </table>
+        </div>
            <a href="{files['detailed_csv'].name}">detailed_comparison.csv</a>
         </p>
     </div>

@@ -662,9 +662,16 @@ class ReproductionAgent:
             print("\033[94m└" + "─"*78 + "┘\033[0m")
             print("="*80 + "\n")
 
+            # Ensure methodology and experiments are strings for concatenation
+            methodology = paper_content.methodology
+            experiments = paper_content.experiments
+            if isinstance(methodology, list):
+                methodology = "\n".join(str(x) for x in methodology)
+            if isinstance(experiments, list):
+                experiments = "\n".join(str(x) for x in experiments)
             analysis = self.result_evaluator.analyze_differences_with_llm(
                 comparisons,
-                paper_content.methodology + "\n" + paper_content.experiments
+                methodology + "\n" + experiments
             )
             logger.info(analysis)
 
