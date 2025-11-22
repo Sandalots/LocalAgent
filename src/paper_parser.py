@@ -12,6 +12,7 @@ from typing import List, Optional
 import PyPDF2
 from dataclasses import dataclass
 
+
 @dataclass
 class PaperContent:
     """Structured representation of paper content."""
@@ -27,11 +28,14 @@ class PaperContent:
         if self.github_urls is None:
             self.github_urls = []
 
+
 class PaperParser:
     """Parse research papers and extract key sections."""
+
     def __init__(self):
+        # Pattern matches URLs possibly split across lines
         self.github_pattern = re.compile(
-            r'https?://github\.com/[\w\-]+/[\w\-\.]+',
+            r'https?://github\.com(?:/|\s+)[\w\-]+(?:/|\s+)[\w\-\.]+',
             re.IGNORECASE
         )
 
@@ -59,7 +63,8 @@ class PaperParser:
                 content.raw_text = "\n".join(text_parts)
 
                 # Extract GitHub URLs
-                content.github_urls = self._extract_github_urls(content.raw_text)
+                content.github_urls = self._extract_github_urls(
+                    content.raw_text)
 
         except Exception as e:
             raise ValueError(f"Error parsing PDF: {e}")
@@ -68,7 +73,10 @@ class PaperParser:
 
     def _extract_github_urls(self, text: str) -> List[str]:
         """Extract GitHub repository URLs from text."""
-        urls = self.github_pattern.findall(text)
+        # Join lines to handle split URLs
+        text_joined = re.sub(r'\s*\n\s*', '', text)
+        urls = self.github_pattern.findall(text_joined)
+        # Clean up URLs (remove any whitespace)
+        urls = [re.sub(r'\s+', '', url) for url in urls]
         # Remove duplicates while preserving order
         return list(dict.fromkeys(urls))
-

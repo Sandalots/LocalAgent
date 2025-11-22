@@ -53,8 +53,7 @@ results/
 .DS_Store
 
 # Research papers and codebases (large files)
-papers/
 repos/
-paper_source_code/*
-
+papers/codebases/*
 outputs/
+cloned_repos/

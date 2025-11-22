@@ -18,13 +18,15 @@ import time
 
 logger = logging.getLogger(__name__)
 
+
 def _get_python_executable():
     """Get the appropriate Python executable for the current platform."""
     if platform.system() == 'Windows':
         # Try python first, then py launcher
         for cmd in ['python', 'py']:
             try:
-                result = subprocess.run([cmd, '--version'], capture_output=True, text=True)
+                result = subprocess.run(
+                    [cmd, '--version'], capture_output=True, text=True)
                 if result.returncode == 0:
                     return cmd
             except FileNotFoundError:
@@ -33,6 +35,7 @@ def _get_python_executable():
     else:
         # Unix/macOS - prefer python3
         return 'python3'
+
 
 def _get_venv_paths(venv_path: Path):
     """Get platform-specific paths for venv executables.
@@ -51,6 +54,7 @@ def _get_venv_paths(venv_path: Path):
 
     return python_exe, pip_exe, scripts_dir
 
+
 @dataclass
 class CodebaseInfo:
     """Information about a codebase."""
@@ -60,6 +64,7 @@ class CodebaseInfo:
     dependencies: List[str]
     readme_content: Optional[str] = None
 
+
 @dataclass
 class ExperimentConfig:
     """Configuration for running an experiment."""
@@ -68,6 +73,7 @@ class ExperimentConfig:
     env_vars: Dict[str, str]
     working_dir: Path
     timeout: int = 3600  # 1 hour default
+
 
 @dataclass
 class ExperimentResult:
@@ -83,16 +89,40 @@ class ExperimentResult:
         if self.outputs is None:
             self.outputs = {}
 
+
 class ExperimentExecutor:
     """Analyze codebase and execute experiments - Stage 3 of the agent."""
-    def __init__(self, config=None):
+
+    def _collect_outputs(self, working_dir: Path) -> dict:
+        """Collect output files from experiment execution."""
+        outputs = {}
+        # Look for common output patterns
+        output_patterns = ['output*.json', 'results*.json', '*.json']
+        for pattern in output_patterns:
+            for output_file in working_dir.glob(pattern):
+                try:
+                    with open(output_file, 'r') as f:
+                        outputs[output_file.name] = json.load(f)
+                except Exception as e:
+                    self.logger.debug(f"Could not parse {output_file}: {e}")
+        return outputs
+
+    def __init__(self, config=None, paper_name=None):
         """
         Initialize experiment executor.
 
         Args:
             config: Configuration dict from config.yaml
+            paper_name: Name of the paper for per-paper logging
         """
         self.config = config or {}
+        self.logger = logger
+        if paper_name:
+            log_filename = f"agent_execution_{paper_name}.log"
+            file_handler = logging.FileHandler(log_filename)
+            file_handler.setFormatter(logging.Formatter(
+                '%(asctime)s %(levelname)s: %(message)s'))
+            self.logger.addHandler(file_handler)
 
     # ============================================================================
     # PART 1: CODEBASE ANALYSIS
@@ -169,24 +199,24 @@ class ExperimentExecutor:
         """Find potential entry point scripts (main, train, experiment, etc.)."""
         entry_patterns = [
             'main*.py', 'train*.py', 'run*.py', 'experiment*.py',
-            'evaluate*.py', '*_local_all*.py'  # For our specific paper
+            'evaluate*.py', 'test*.py'
         ]
 
         entry_points = []
 
-        # Search in root and immediate subdirectories
+        # Recursively search for entry points, excluding unwanted dirs
+        exclude_dirs = {'venv', 'env', 'site-packages', '__pycache__'}
         for pattern in entry_patterns:
-            # Root level
-            matches = list(path.glob(pattern))
-            # Filter out library files and venv
-            for match in matches:
-                if not any(part.startswith('.') or part in ['venv', 'env', 'site-packages', '__pycache__']
-                          for part in match.parts):
+            for match in path.rglob(pattern):
+                # Exclude files in unwanted directories
+                if not any(part.startswith('.') or part in exclude_dirs for part in match.parts):
                     if match.is_file() and match not in entry_points:
                         entry_points.append(match)
 
-        # Sort by likelihood (main > run > train > experiment > evaluate)
-        priority_order = ['main', 'run', 'train', 'experiment', 'evaluate']
+        # Sort by likelihood (evaluate > test > main > run > train > experiment)
+        priority_order = ['evaluate', 'test',
+                          'main', 'run', 'train', 'experiment']
+
         def sort_key(p: Path):
             name = p.stem.lower()
             for i, prefix in enumerate(priority_order):
@@ -198,36 +228,79 @@ class ExperimentExecutor:
         return entry_points
 
     def _extract_dependencies(self, path: Path, language: str) -> List[str]:
-        """Extract project dependencies from requirements files."""
+        """Extract project dependencies from requirements files and entry script imports."""
         dependencies = []
 
-        if language == 'python':
-            # Check requirements.txt
-            req_file = path / 'requirements.txt'
-            if req_file.exists():
-                try:
-                    with open(req_file, 'r') as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith('#'):
-                                # Remove comments and whitespace
-                                dep = line.split('#')[0].strip()
-                                if dep:
-                                    dependencies.append(dep)
-                except Exception as e:
-                    logger.warning(f"Error reading requirements.txt: {e}")
+        # Auto-detect additional dependencies from entry script imports
+        entry_points = self._find_entry_points(path, language)
+        if entry_points:
+            main_script = entry_points[0]
+            try:
+                with open(main_script, 'r', encoding='utf-8') as f:
+                    code = f.read()
+                    import_lines = [line for line in code.splitlines() if line.strip().startswith('import') or line.strip().startswith('from')]
+                    for line in import_lines:
+                        if 'numpy' in line and 'numpy' not in dependencies:
+                            dependencies.append('numpy')
+                        if 'matplotlib' in line and 'matplotlib' not in dependencies:
+                            dependencies.append('matplotlib')
+                        if 'torch' in line and 'torch' not in dependencies:
+                            dependencies.append('torch')
+                        if 'torchvision' in line and 'torchvision' not in dependencies:
+                            dependencies.append('torchvision')
+            except Exception as e:
+                self.logger.warning(f"Error auto-detecting dependencies from entry script: {e}")
 
-            # Check setup.py for install_requires
+        if language == 'python':
+            req_files = [
+                'requirements.txt',
+                'floyd_requirements.txt',
+                'requirements-dev.txt',
+                'requirements-prod.txt',
+                'requirements_test.txt',
+            ]
+            found_req = False
+            for req_name in req_files:
+                req_file = path / req_name
+                if req_file.exists():
+                    found_req = True
+                    self.logger.info(f"✓ Found requirements file: {req_file.name}")
+                    try:
+                        with open(req_file, 'r') as f:
+                            for line in f:
+                                line = line.strip()
+                                if line and not line.startswith('#'):
+                                    dep = line.split('#')[0].strip()
+                                    if dep and dep not in dependencies:
+                                        dependencies.append(dep)
+                    except Exception as e:
+                        self.logger.warning(f"Error reading {req_file.name}: {e}")
+
             setup_file = path / 'setup.py'
             if setup_file.exists():
                 try:
                     with open(setup_file, 'r') as f:
                         content = f.read()
-                        # Simple regex-free extraction
                         if 'install_requires' in content:
-                            logger.debug("Found install_requires in setup.py")
+                            self.logger.debug("Found install_requires in setup.py")
                 except Exception as e:
-                    logger.warning(f"Error reading setup.py: {e}")
+                    self.logger.warning(f"Error reading setup.py: {e}")
+
+            # If no requirements.txt, parse README for PyTorch
+            if not found_req:
+                readme_path = path / 'README.md'
+                if readme_path.exists():
+                    try:
+                        with open(readme_path, 'r', encoding='utf-8') as f:
+                            readme = f.read().lower()
+                            if 'pytorch' in readme or 'torchvision' in readme:
+                                self.logger.info("✓ README mentions PyTorch, adding torch and torchvision to dependencies")
+                                if 'torch' not in dependencies:
+                                    dependencies.append('torch')
+                                if 'torchvision' not in dependencies:
+                                    dependencies.append('torchvision')
+                    except Exception as e:
+                        self.logger.warning(f"Error reading README.md: {e}")
 
         return dependencies
 
@@ -284,11 +357,13 @@ class ExperimentExecutor:
             filepath = data_dir / filename
 
             if not filepath.exists():
-                results['warnings'].append(f"Missing {requirements['description']}: {filename}")
+                results['warnings'].append(
+                    f"Missing {requirements['description']}: {filename}")
                 continue
 
             try:
-                line_count = sum(1 for _ in open(filepath, 'r', encoding='utf-8'))
+                line_count = sum(1 for _ in open(
+                    filepath, 'r', encoding='utf-8'))
                 file_size = filepath.stat().st_size
 
                 results['file_stats'][filename] = {
@@ -303,14 +378,16 @@ class ExperimentExecutor:
                         f"(expected >{requirements['min_lines']})"
                     )
                 else:
-                    logger.info(f"✓ {filename}: {line_count} lines, {file_size/(1024*1024):.1f}MB")
+                    logger.info(
+                        f"✓ {filename}: {line_count} lines, {file_size/(1024*1024):.1f}MB")
 
             except Exception as e:
                 results['warnings'].append(f"Error reading {filename}: {e}")
                 results['file_stats'][filename] = {'error': str(e)}
 
         if results['warnings']:
-            logger.warning(f"Data validation found {len(results['warnings'])} issues")
+            logger.warning(
+                f"Data validation found {len(results['warnings'])} issues")
         else:
             logger.info("✓ Data validation passed")
 
@@ -331,7 +408,36 @@ class ExperimentExecutor:
 
         # Check if virtual environment exists
         venv_path = codebase_path / 'venv'
-        if not venv_path.exists():
+        venv_exists = venv_path.exists()
+        requirements_path = codebase_path / 'requirements.txt'
+
+        # Check if venv is already set up and dependencies installed
+        venv_ready = False
+        if venv_exists:
+            python_executable, _, _ = _get_venv_paths(venv_path)
+            # Check if all dependencies are installed
+            if requirements_path.exists():
+                with open(requirements_path) as f:
+                    reqs = [line.strip() for line in f if line.strip()
+                            and not line.startswith('#')]
+                missing = []
+                for dep in reqs:
+                    result = subprocess.run(
+                        [str(python_executable), '-m', 'pip', 'show', dep],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode != 0:
+                        missing.append(dep)
+                if not missing:
+                    logger.info(
+                        "✓ Reusing cached venv and dependencies (no install needed)")
+                    venv_ready = True
+                else:
+                    logger.info(
+                        f"Some dependencies missing in venv: {missing}")
+
+        if not venv_exists:
             logger.info("Creating virtual environment...")
             try:
                 python_cmd = _get_python_executable()
@@ -344,30 +450,37 @@ class ExperimentExecutor:
                 logger.error(f"Failed to create virtual environment: {e}")
                 return False
 
-        # Install dependencies
-        if dependencies:
-            _, pip_executable, _ = _get_venv_paths(venv_path)
+        # Install dependencies if not already installed
+        if dependencies and not venv_ready:
+            python_executable, _, _ = _get_venv_paths(venv_path)
             logger.info(f"Installing {len(dependencies)} dependencies...")
-            logger.info("⏳ This may take a few minutes depending on package sizes...")
-            logger.info(f"   (Timeout: 10 minutes)")
+            logger.info(
+                "⏳ This may take a few minutes depending on package sizes...")
+            logger.info(f"   (Timeout: 30 minutes)")
 
-            try:
-                subprocess.run(
-                    [str(pip_executable), 'install'] + dependencies,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=600  # 10 minute timeout
-                )
-                logger.info("✓ Dependencies installed successfully")
-                return True
-            except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to install dependencies: {e.stderr}")
-                return False
-            except subprocess.TimeoutExpired:
-                logger.error("Dependency installation timed out after 10 minutes")
-                return False
+            for dep in dependencies:
+                logger.info(f"→ Installing: {dep}")
+                try:
+                    result = subprocess.run(
+                        [str(python_executable), '-m', 'pip', 'install', dep],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=1800  # 30 minute timeout
+                    )
+                    logger.info(f"✓ Installed: {dep}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"✗ Failed to install {dep}: {e.stderr}")
+                    return False
+                except subprocess.TimeoutExpired:
+                    logger.error(
+                        f"✗ Timeout installing {dep} after 30 minutes")
+                    return False
+            logger.info("✓ All dependencies installed successfully")
+            return True
 
+        logger.info(
+            "✓ Environment setup complete (venv cached if previously installed)")
         return True
 
     # ============================================================================
@@ -384,53 +497,192 @@ class ExperimentExecutor:
         Returns:
             ExperimentResult with outputs and status
         """
-        logger.info(f"Running experiment: {config.script_path}")
+
+        self.logger.info(f"[run_experiment] Starting experiment: {config.script_path}")
+        self.logger.info(f"[run_experiment] Command: {config.script_path}")
+        self.logger.info(f"[run_experiment] Args: {config.args}")
+        self.logger.info(f"[run_experiment] Working directory: {config.working_dir if config.working_dir else config.script_path.parent}")
+        self.logger.info(f"[run_experiment] Environment variables: {config.env_vars}")
 
         start_time = time.time()
+        from datetime import datetime
+        start_time_str = datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')
+        self.logger.info(f"[run_experiment] Start time: {start_time_str}")
 
-        # Prepare command with platform-specific Python
-        python_cmd = _get_python_executable()
-        cmd = [python_cmd, str(config.script_path)] + config.args
+        # Ensure script_path is absolute
+        script_path = config.script_path.resolve()
+
+
+        # Robust venv detection: search for venv in working_dir and subdirs
+        def find_venv_path(base_dir: Path, max_depth: int = 2) -> Optional[Path]:
+            # Check base_dir/venv first
+            candidate = base_dir / 'venv'
+            if candidate.exists():
+                return candidate
+            # Search subdirectories up to max_depth
+            for root, dirs, files in os.walk(base_dir):
+                rel_depth = Path(root).relative_to(base_dir).parts
+                if len(rel_depth) > max_depth:
+                    continue
+                if 'venv' in dirs:
+                    venv_candidate = Path(root) / 'venv'
+                    if (venv_candidate / 'bin' / 'python').exists() or (venv_candidate / 'Scripts' / 'python.exe').exists():
+                        return venv_candidate
+            return None
+
+
+        # For cloned_repos: use local .venv if present, else workspace .venv
+        workspace_venv_python = Path(__file__).parent.parent / '.venv' / 'bin' / 'python'
+        if str(config.working_dir).startswith(str(Path(__file__).parent.parent / 'cloned_repos')):
+            local_venv_path = Path(config.working_dir) / '.venv'
+            if (local_venv_path / 'bin' / 'python').exists():
+                python_cmd = str(local_venv_path / 'bin' / 'python')
+                self.logger.info(f"[run_experiment] Using local .venv Python for cloned_repo: {python_cmd}")
+            else:
+                python_cmd = str(workspace_venv_python)
+                self.logger.info(f"[run_experiment] Forcing workspace .venv Python for cloned_repo: {python_cmd}")
+        else:
+            venv_path = find_venv_path(config.working_dir)
+            if venv_path:
+                bin_dir = venv_path / ('Scripts' if platform.system() == 'Windows' else 'bin')
+                python3_path = bin_dir / 'python3'
+                python_path = bin_dir / 'python'
+                python_executable = None
+                if python3_path.exists() and os.access(python3_path, os.X_OK):
+                    python_executable = python3_path.resolve()
+                elif python_path.exists() and os.access(python_path, os.X_OK):
+                    python_executable = python_path.resolve()
+                if python_executable:
+                    python_cmd = str(python_executable)
+                    self.logger.info(f"[run_experiment] Using venv Python: {python_cmd}")
+                else:
+                    python_cmd = _get_python_executable()
+                    self.logger.info(f"[run_experiment] No venv found, using workspace Python: {python_cmd}")
+            else:
+                python_cmd = _get_python_executable()
+                self.logger.info(f"[run_experiment] No venv found, using workspace Python: {python_cmd}")
+        cmd = [python_cmd, str(script_path)] + config.args
 
         # Prepare environment variables
         env = os.environ.copy()
         env.update(config.env_vars)
 
-        # Set random seeds for reproducibility
-        if 'random_seed' in self.config.get('experiments', {}):
-            seed = self.config['experiments']['random_seed']
-            if self.config['experiments'].get('set_environment_seeds', True):
-                env['PYTHONHASHSEED'] = str(seed)
-                env['RANDOM_SEED'] = str(seed)
-                logger.debug(f"Set PYTHONHASHSEED and RANDOM_SEED to {seed}")
+        # Set working directory to script's parent
+        working_dir = config.working_dir if config.working_dir else script_path.parent
 
         try:
-            result = subprocess.run(
+            import subprocess
+            self.logger.info(f"[run_experiment] Running subprocess: {' '.join(cmd)}")
+            proc = subprocess.Popen(
                 cmd,
-                cwd=str(config.working_dir),
+                cwd=str(working_dir),
                 env=env,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=config.timeout
+                bufsize=1
             )
-
+            last_log_time = start_time
+            poll_interval = 10  # seconds
+            log_interval = 300  # 5 minutes
+            stdout_lines = []
+            stderr_lines = []
+            import threading
+            def stream_output(pipe, lines, is_stderr=False):
+                for line in iter(pipe.readline, ''):
+                    lines.append(line)
+                    # Log as ERROR only if the line looks like a real error
+                    if is_stderr and any(word in line.lower() for word in ["error", "traceback", "exception"]):
+                        self.logger.error(line.rstrip())
+                    else:
+                        self.logger.info(line.rstrip())
+                pipe.close()
+            stdout_thread = threading.Thread(target=stream_output, args=(proc.stdout, stdout_lines, False))
+            stderr_thread = threading.Thread(target=stream_output, args=(proc.stderr, stderr_lines, True))
+            stdout_thread.start()
+            stderr_thread.start()
+            while proc.poll() is None:
+                now = time.time()
+                if now - last_log_time >= log_interval:
+                    elapsed = int((now - start_time) // 60)
+                    self.logger.info(f"[run_experiment] Experiment still running after {elapsed} minutes...")
+                    last_log_time = now
+                time.sleep(poll_interval)
+            stdout_thread.join()
+            stderr_thread.join()
+            stdout = ''.join(stdout_lines)
+            stderr = ''.join(stderr_lines)
             duration = time.time() - start_time
+            end_time_str = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            self.logger.info(f"[run_experiment] End time: {end_time_str}")
+            self.logger.info(f"[run_experiment] Duration: {duration:.2f} seconds")
 
             # Try to parse any JSON output files
-            outputs = self._collect_outputs(config.working_dir)
+            outputs = self._collect_outputs(working_dir)
+
+            # Log full stdout and stderr for debugging
+            if proc.returncode != 0:
+                self.logger.error(f"Experiment failed.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}")
+
+                # Auto-retry if dataset error detected
+                if 'Dataset not found or corrupted' in stderr and 'download=False' in stderr:
+                    self.logger.warning("[run_experiment] Detected missing dataset error. Retrying with download=True...")
+                    # Try to patch args if possible
+                    # If script supports --download, add it
+                    if '--download' not in config.args:
+                        patched_args = config.args + ['--download']
+                        cmd2 = [python_cmd, str(script_path)] + patched_args
+                        self.logger.info(f"[run_experiment] Retrying subprocess: {' '.join(cmd2)}")
+                        proc2 = subprocess.Popen(
+                            cmd2,
+                            cwd=str(working_dir),
+                            env=env,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True
+                        )
+                        last_log_time2 = time.time()
+                        while True:
+                            retcode2 = proc2.poll()
+                            now2 = time.time()
+                            if retcode2 is not None:
+                                break
+                            if now2 - last_log_time2 >= log_interval:
+                                elapsed2 = int((now2 - start_time) // 60)
+                                self.logger.info(f"[run_experiment] Experiment retry still running after {elapsed2} minutes...")
+                                last_log_time2 = now2
+                            time.sleep(poll_interval)
+                        stdout2, stderr2 = proc2.communicate()
+                        duration2 = time.time() - start_time
+                        self.logger.info(f"[run_experiment] Retry duration: {duration2:.2f} seconds")
+                        outputs2 = self._collect_outputs(working_dir)
+                        if proc2.returncode != 0:
+                            self.logger.error(f"Experiment retry failed.\nSTDOUT:\n{stdout2}\nSTDERR:\n{stderr2}")
+                        else:
+                            self.logger.info(f"[run_experiment] Experiment retry completed successfully.\nSTDOUT:\n{stdout2}")
+                        return ExperimentResult(
+                            success=(proc2.returncode == 0),
+                            stdout=stdout2,
+                            stderr=stderr2,
+                            return_code=proc2.returncode,
+                            duration=duration2,
+                            outputs=outputs2
+                        )
+            else:
+                self.logger.info(f"[run_experiment] Experiment completed successfully.\nSTDOUT:\n{stdout}")
 
             return ExperimentResult(
-                success=(result.returncode == 0),
-                stdout=result.stdout,
-                stderr=result.stderr,
-                return_code=result.returncode,
+                success=(proc.returncode == 0),
+                stdout=stdout,
+                stderr=stderr,
+                return_code=proc.returncode,
                 duration=duration,
                 outputs=outputs
             )
 
         except subprocess.TimeoutExpired:
             duration = time.time() - start_time
-            logger.error(f"Experiment timed out after {config.timeout} seconds")
+            self.logger.error(f"Experiment timed out after {config.timeout} seconds")
             return ExperimentResult(
                 success=False,
                 stdout="",
@@ -439,29 +691,14 @@ class ExperimentExecutor:
                 duration=duration
             )
         except Exception as e:
+            import traceback
             duration = time.time() - start_time
-            logger.error(f"Experiment failed with error: {e}")
+            tb = traceback.format_exc()
+            self.logger.error(f"Experiment failed with error: {e}\n{tb}")
             return ExperimentResult(
                 success=False,
                 stdout="",
-                stderr=str(e),
+                stderr=tb,
                 return_code=-1,
                 duration=duration
             )
-
-    def _collect_outputs(self, working_dir: Path) -> Dict[str, Any]:
-        """Collect output files from experiment execution."""
-        outputs = {}
-
-        # Look for common output patterns
-        output_patterns = ['output*.json', 'results*.json', '*.json']
-
-        for pattern in output_patterns:
-            for output_file in working_dir.glob(pattern):
-                try:
-                    with open(output_file, 'r') as f:
-                        outputs[output_file.name] = json.load(f)
-                except Exception as e:
-                    logger.debug(f"Could not parse {output_file}: {e}")
-
-        return outputs
