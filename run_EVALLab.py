@@ -1,3 +1,11 @@
+"""===============================================================================
+EVALLAB ENTRYPOINT: RUNS THE EVALLAB PIPELINE
+
+This script is the main entrypoint for EVALLab. It parses command-line arguments,
+initializes the agent's pipeline, and orchestrates the full research paper reproduction workflow, from retrieving and reading the paper, codebase, running experiments and returning evaulative results and benchmarks back to the EVALLab end-user.
+===============================================================================
+"""
+
 from src.pipeline import ReproductionAgent
 import sys
 import argparse
