@@ -54,6 +54,6 @@ results/
 
 # Research papers and codebases (large files)
 repos/
-papers_source_code/*
+papers/codebases/*
 outputs/
 cloned_repos/

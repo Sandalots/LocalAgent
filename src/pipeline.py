@@ -369,7 +369,7 @@ class ReproductionAgent:
 
         Args:
             paper_path: Path to the research paper PDF (if None, searches ./papers/ directory)
-            codebase_source: Either GitHub URL or path to local codebase (if None, searches ./papers_source_code/)
+            codebase_source: Either GitHub URL or path to local codebase (if None, searches ./papers/codebases/)
 
         Returns:
             Dictionary with results and evaluation
@@ -487,12 +487,12 @@ class ReproductionAgent:
                   " Unable to find experiment code from any source.".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" +
-                  " 💡 SOLUTION: Manually add codebase to ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
+                  " 💡 SOLUTION: Manually add codebase to ./papers/codebases/".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" + " ".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" +
                   "   Steps:".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" +
-                  "   1. Create ./papers_source_code/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
+                  "   1. Create ./papers/codebases/ directory if it doesn't exist".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" +
                   "   2. Place your experiment codebase inside it".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" +
@@ -504,7 +504,7 @@ class ReproductionAgent:
                 print(
                     "\033[91m│\033[0m" + f"   ✗ User path: {local_path}".ljust(78) + "\033[91m│\033[0m")
             print("\033[91m│\033[0m" +
-                  "   ✗ Local directory: ./papers_source_code/".ljust(78) + "\033[91m│\033[0m")
+                  "   ✗ Local directory: ./papers/codebases/".ljust(78) + "\033[91m│\033[0m")
             if paper_content.github_urls:
                 print("\033[91m│\033[0m" + f"   ✗ GitHub URLs: {len(paper_content.github_urls)} found but failed to clone".ljust(
                     78) + "\033[91m│\033[0m")
@@ -514,7 +514,7 @@ class ReproductionAgent:
             print("\033[91m└" + "─"*78 + "┘\033[0m")
             print("="*80 + "\n")
             logger.error("No codebase available!")
-            return {'error': 'No codebase available - please add code to ./papers_source_code/'}
+            return {'error': 'No codebase available - please add code to ./papers/codebases/'}
 
         logger.info(f"✓ Codebase retrieved at: {codebase_path}")
 
@@ -1007,7 +1007,7 @@ def main():
     parser.add_argument(
         '--codebase',
         type=str,
-        help='GitHub URL or local path to codebase (default: auto-detect from ./papers_source_code/)'
+        help='GitHub URL or local path to codebase (default: auto-detect from ./papers/codebases/)'
     )
     parser.add_argument(
         '--config',

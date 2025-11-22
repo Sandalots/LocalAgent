@@ -29,8 +29,8 @@ The agent uses the following **4-stage pipeline**:
    ```
 
 3. **Place paper code in the correct directory:**
-   - Put the `supplementary_material` directory inside `papers_source_code/`
-   - Final structure: `papers_source_code/supplementary_material/`
+   - Put the `supplementary_material` directory inside `papers/codebases/`
+   - Final structure: `papers/codebases/supplementary_material/`
 
 4. **Run the agent:**
 
@@ -42,12 +42,12 @@ The agent uses the following **4-stage pipeline**:
    python3 run_EVALLab.py papers/YourPaper.pdf
 
    # Run with a specific paper and local codebase directory
-   python3 run_EVALLab.py papers/YourPaper.pdf --code ./papers_source_code/your_code_dir
+   python3 run_EVALLab.py papers/YourPaper.pdf --code ./papers/codebases/your_code_dir
 
    # If no GitHub repo is found in the paper, the agent will use the provided local codebase path
-   # or fallback to papers_source_code/ if available.
+   # or fallback to papers/codebases/ if available.
    ```
 
 ## Performance
 
-**~94.2% success rate** (339/360 metrics matched) with 1.05% mean deviation from baseline results currently when fed the 'Decontextualization' paper.
+**~94.2% success rate** (339/360 metrics matched) with 1.05% mean deviation from baseline results currently when fed the 'Decontextualization' paper using the 'Full Corpus searchspace'.
