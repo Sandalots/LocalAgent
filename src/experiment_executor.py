@@ -588,13 +588,17 @@ class ExperimentExecutor:
             stdout_lines = []
             stderr_lines = []
             import threading
-            def stream_output(pipe, lines, log_func):
+            def stream_output(pipe, lines, is_stderr=False):
                 for line in iter(pipe.readline, ''):
                     lines.append(line)
-                    log_func(line.rstrip())
+                    # Log as ERROR only if the line looks like a real error
+                    if is_stderr and any(word in line.lower() for word in ["error", "traceback", "exception"]):
+                        self.logger.error(line.rstrip())
+                    else:
+                        self.logger.info(line.rstrip())
                 pipe.close()
-            stdout_thread = threading.Thread(target=stream_output, args=(proc.stdout, stdout_lines, self.logger.info))
-            stderr_thread = threading.Thread(target=stream_output, args=(proc.stderr, stderr_lines, self.logger.error))
+            stdout_thread = threading.Thread(target=stream_output, args=(proc.stdout, stdout_lines, False))
+            stderr_thread = threading.Thread(target=stream_output, args=(proc.stderr, stderr_lines, True))
             stdout_thread.start()
             stderr_thread.start()
             while proc.poll() is None:
