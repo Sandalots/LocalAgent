@@ -349,15 +349,21 @@ class ReproductionAgent:
         if json_match:
             response = json_match.group(0)
 
+        # Clean control characters that break JSON
+        cleaned_response = re.sub(r'[\x00-\x1F\x7F]', '', response)
         try:
-            # Clean control characters that break JSON
-            cleaned_response = re.sub(r'[\x00-\x1F\x7F]', '', response)
             return json.loads(cleaned_response)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON: {e}")
-            logger.error(f"Full raw LLM response:\n{response}")
-            logger.debug(f"Cleaned response:\n{cleaned_response}")
-            return {}
+        except json.JSONDecodeError:
+            # Try to repair with python-json5 if available
+            try:
+                import json5
+                logger.warning("Trying to parse with json5 for more tolerant JSON parsing.")
+                return json5.loads(cleaned_response)
+            except Exception as e2:
+                logger.error(f"Failed to parse JSON with both stdlib and json5: {e2}")
+                logger.error(f"Full raw LLM response:\n{response}")
+                logger.debug(f"Cleaned response:\n{cleaned_response}")
+                return {}
 
     # ============================================================================
     # MAIN WORKFLOW METHODS
@@ -451,10 +457,19 @@ class ReproductionAgent:
 
         logger.info(
             f"✓ Extracted abstract ({len(paper_content.abstract)} chars)")
+        logger.debug(f"Abstract extracted: {paper_content.abstract[:500]}{'...' if len(paper_content.abstract) > 500 else ''}")
+        if len(paper_content.abstract) < 100:
+            logger.warning("Extracted abstract is very short. Extraction may have failed or missed content.")
         logger.info(
             f"✓ Extracted methodology ({len(paper_content.methodology)} chars)")
+        logger.debug(f"Methodology extracted: {paper_content.methodology[:500]}{'...' if len(paper_content.methodology) > 500 else ''}")
+        if len(paper_content.methodology) < 100:
+            logger.warning("Extracted methodology is very short. Extraction may have failed or missed content.")
         logger.info(
             f"✓ Extracted experiments ({len(paper_content.experiments)} chars)")
+        logger.debug(f"Experiments extracted: {paper_content.experiments[:500]}{'...' if len(paper_content.experiments) > 500 else ''}")
+        if len(paper_content.experiments) < 100:
+            logger.warning("Extracted experiments section is very short. Extraction may have failed or missed content.")
 
         # Step 4: Retrieve codebase (Stage 2 - NEW UNIFIED MODULE)
         print("\n" + "="*80)

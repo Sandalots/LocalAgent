@@ -6,3 +6,4 @@ seaborn
 pandas
 pyyaml
 python-dotenv
+json5
