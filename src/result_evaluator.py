@@ -44,6 +44,29 @@ class ExperimentSet:
 
 
 class ResultEvaluator:
+    def _build_metrics_table_rows(self, df):
+        """
+        Build HTML table rows for the metrics comparison table.
+        Args:
+            df: Pandas DataFrame with comparison results
+        Returns:
+            HTML string with <tr> rows
+        """
+        rows = []
+        for _, row in df.iterrows():
+            diff_class = 'diff-pos' if row['percent_difference'] >= 0 else 'diff-neg'
+            status_class = 'status-pass' if row['within_threshold'] else 'status-fail'
+            rows.append(
+                f"<tr>"
+                f"<td>{row['configuration']}</td>"
+                f"<td>{row['metric_name']}</td>"
+                f"<td>{row['baseline_value']:.4f}</td>"
+                f"<td>{row['reproduced_value']:.4f}</td>"
+                f"<td class='{diff_class}'>{row['percent_difference']:+.2f}%</td>"
+                f"<td class='{status_class}'>{'PASS' if row['within_threshold'] else 'FAIL'}</td>"
+                f"</tr>"
+            )
+        return '\n'.join(rows)
     def generate_visualizations_index(self, visualizations_root: Path):
         """
         Generate a top-level dashboard listing all papers' visualizations.
@@ -86,7 +109,6 @@ class ResultEvaluator:
 """
         with open(visualizations_root / 'visualizations.html', 'w') as f:
             f.write(html)
-    """Evaluate reproduced results against paper baselines."""
 
     def __init__(self, llm_client=None, threshold: float = 0.05):
         """
@@ -1640,23 +1662,6 @@ Provide a concise analysis (3-4 paragraphs)."""
                 <th>Status</th>
             </tr>
             {self._build_metrics_table_rows(df)}
-            def _build_metrics_table_rows(self, df):
-                rows = []
-                for _, row in df.iterrows():
-                    diff_class = 'diff-pos' if row["percent_difference"] >= 0 else 'diff-neg'
-                    status_class = 'status-pass' if row["within_threshold"] else 'status-fail'
-                    status_text = 'PASS' if row["within_threshold"] else 'FAIL'
-                    rows.append(
-                        f'<tr>'
-                        f'<td>{row["configuration"]}</td>'
-                        f'<td>{row["metric_name"]}</td>'
-                        f'<td>{row["baseline_value"]:.4f}</td>'
-                        f'<td>{row["reproduced_value"]:.4f}</td>'
-                        f'<td class="{diff_class}">{row["percent_difference"]:.2f}</td>'
-                        f'<td class="{status_class}">{status_text}</td>'
-                        f'</tr>'
-                    )
-                return ''.join(rows)
         </table>
         </div>
            <a href="{files['detailed_csv'].name}">detailed_comparison.csv</a>

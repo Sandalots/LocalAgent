@@ -19,7 +19,23 @@ pip install -r requirements.txt
 # check if papers/codebases/supplementary_materials directory exists
 if [ ! -d "papers/codebases/supplementary_material" ]; then
 # tell user to manually download the decontextualization codebase and place it here.
-  echo "Please download the Decontextualization codebase from https://openreview.net/forum?id=cK8YYMc65B#discussion and place it in the papers/codebases/ directory."
+  # check if user is linux or mac and has the curl command, download https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material using curl and place it in papers/codebases/
+  if [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "darwin"* ]]; then
+    if command -v curl &> /dev/null; then
+      echo "Downloading Decontextualization codebase..."
+      mkdir -p papers/codebases/
+      curl -L -o papers/codebases/supplementary_material.zip "https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material"
+      unzip papers/codebases/supplementary_material.zip -d papers/codebases/supplementary_material
+      rm papers/codebases/supplementary_material.zip
+    else
+      echo "Please install curl to download the Decontextualization codebase automatically."
+      echo "Alternatively, manually download the codebase from https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material and place it in papers/codebases/supplementary_material"
+      exit 1
+    fi
+  else
+    echo "Please manually download the Decontextualization codebase from https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material and place it in papers/codebases/supplementary_material"
+    exit 1
+  fi
 
 # else tell user that the codebase is found
 else
