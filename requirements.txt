@@ -6,4 +6,15 @@ seaborn
 pandas
 PyYAML
 python-dotenv
-
+torch
+sentence-transformers
+scipy
+tqdm
+scikit-learn
+rouge-score
+psutil
+colbert
+transformers
+faiss
+openai
+arxiv
