@@ -35,7 +35,8 @@ if (-not (Test-Path $codebaseDir)) {
             New-Item -ItemType Directory -Path "papers/codebases" | Out-Null
         }
         Invoke-WebRequest -Uri $url -OutFile $zipPath
-        Expand-Archive -Path $zipPath -DestinationPath $codebaseDir
+        # Extract directly to papers/codebases/ to avoid duplicate folder
+        Expand-Archive -Path $zipPath -DestinationPath "papers/codebases/"
         Remove-Item $zipPath
         Write-Host "Download and extraction complete."
     } catch {

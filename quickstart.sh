@@ -25,7 +25,7 @@ if [ ! -d "papers/codebases/supplementary_material" ]; then
       echo "Downloading Decontextualization codebase..."
       mkdir -p papers/codebases/
       curl -L -o papers/codebases/supplementary_material.zip "https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material"
-      unzip papers/codebases/supplementary_material.zip -d papers/codebases/supplementary_material
+      unzip papers/codebases/supplementary_material.zip -d papers/codebases/
       rm papers/codebases/supplementary_material.zip
     else
       echo "Please install curl to download the Decontextualization codebase automatically."
