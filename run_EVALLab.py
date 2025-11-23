@@ -280,7 +280,7 @@ Examples:
             "  • CSV data: \033[1;93m./outputs/visualizations/detailed_comparison.csv\033[0m")
 
         print(
-            "\n\033[1;92m✨ Open the HTML dashboard in your browser to explore results!\033[0m\n")
+            "\n\033[1;92m✨ Open the HTML dashboard (outputs/visualizations/visualizations.html) in your browser to explore results!\033[0m\n")
 
         return 0
 
