@@ -27,6 +27,12 @@ if [ ! -d "papers/codebases/supplementary_material" ]; then
       curl -L -o papers/codebases/supplementary_material.zip "https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material"
       unzip papers/codebases/supplementary_material.zip -d papers/codebases/
       rm papers/codebases/supplementary_material.zip
+      # remove __MACOSX directory if it exists
+      if [ -d "papers/codebases/__MACOSX" ]; then
+        rm -rf papers/codebases/__MACOSX
+      fi
+      echo "Decontextualization codebase downloaded and extracted to papers/codebases/supplementary_material."
+
     else
       echo "Please install curl to download the Decontextualization codebase automatically."
       echo "Alternatively, manually download the codebase from https://openreview.net/attachment?id=cK8YYMc65B&name=supplementary_material and place it in papers/codebases/supplementary_material"
