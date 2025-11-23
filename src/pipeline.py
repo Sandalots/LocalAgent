@@ -451,9 +451,23 @@ class ReproductionAgent:
 
         sections = self._extract_paper_sections(paper_content.raw_text)
         paper_content.abstract = sections.get('abstract', '')
-        paper_content.methodology = sections.get('methodology', '')
-        paper_content.experiments = sections.get('experiments', '')
-        paper_content.results = sections.get('results', '')
+        methodology = sections.get('methodology', '')
+        experiments = sections.get('experiments', '')
+        results = sections.get('results', '')
+
+        # Ensure all are strings (join lists if needed)
+        if isinstance(methodology, list):
+            methodology = '\n'.join(str(x) for x in methodology)
+        if isinstance(experiments, list):
+            experiments = '\n'.join(str(x) for x in experiments)
+        if isinstance(results, list):
+            results = '\n'.join(str(x) for x in results)
+        if isinstance(paper_content.abstract, list):
+            paper_content.abstract = '\n'.join(str(x) for x in paper_content.abstract)
+
+        paper_content.methodology = methodology
+        paper_content.experiments = experiments
+        paper_content.results = results
 
         logger.info(
             f"✓ Extracted abstract ({len(paper_content.abstract)} chars)")
